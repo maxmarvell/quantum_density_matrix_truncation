@@ -4,7 +4,6 @@ from scipy.linalg import polar
 from scipy.sparse.linalg import eigs
 from scipy.stats import unitary_group
 from typing import Self
-# from transfer_matrix import TransferMatrix
 
 class UniformMPS():
 
@@ -40,26 +39,6 @@ class UniformMPS():
         A = np.random.normal(size=(d*p, d)) + 1j * np.random.normal(size=(d*p, d))
         A, _ = polar(A)
         return cls(A.reshape(d, p, d))
-    
-    @classmethod
-    def from_file(cls, file_path: str):
-        """
-            Create a UniformMPS instance by reading tensor data from a file.
-
-            args:
-                file_path: Path to the file containing the tensor data.
-
-            returns:
-                A UniformMPS instance initialized with the tensor data from the file.
-        """
-        # Load the tensor data from the file
-        tensor = np.load(file_path)
-
-        # Ensure the tensor has the correct shape
-        if len(tensor.shape) != 3:
-            raise ValueError("The loaded tensor must have three dimensions (d, p, d).")
-
-        return cls(tensor)
     
     @property
     def matrix(self):
@@ -188,41 +167,37 @@ if __name__ == "__main__":
     Da = 5
     p = 2   
 
-    # uMPS = UniformMPS.random(Da, p)
-    # uMPS.r_dominant()
-    # r = uMPS.r
-    # E = uMPS.transfer_matrix
+    uMPS = UniformMPS.random(Da, p)
+    uMPS.r_dominant()
+    r = uMPS.r
+    E = uMPS.transfer_matrix
 
-    # # check normalisation
-    # assert np.abs(ncon((r, ), ((1, 1))) - 1) < 1e-12
+    # check normalisation
+    assert np.abs(ncon((r, ), ((1, 1))) - 1) < 1e-12
 
-    # # check left subspace
-    # assert np.allclose(ncon((E.tensor,), ((1, 1, -1, -2))), np.eye(Da))
+    # check left subspace
+    assert np.allclose(ncon((E.tensor,), ((1, 1, -1, -2))), np.eye(Da))
 
-    # # check right subspace
-    # assert np.allclose(r, np.conj(r).T)
+    # check right subspace
+    assert np.allclose(r, np.conj(r).T)
 
-    # assert np.allclose(r, ncon((E.tensor, r), ((-1, -2, 1, 2), (1, 2))))
+    assert np.allclose(r, ncon((E.tensor, r), ((-1, -2, 1, 2), (1, 2))))
 
-    # # check power function is working
-    # assert np.allclose((E ** 4).tensor, ncon((E.tensor, E.tensor, E.tensor, E.tensor), ((-1, -2, 3, 4), (3, 4, 5, 6), (5, 6, 7, 8), (7, 8, -3, -4))))
+    # check power function is working
+    assert np.allclose((E ** 4).tensor, ncon((E.tensor, E.tensor, E.tensor, E.tensor), ((-1, -2, 3, 4), (3, 4, 5, 6), (5, 6, 7, 8), (7, 8, -3, -4))))
 
-    # # check gauge transform
-    # p = uMPS.reduced_density_mat(3)
-    # Up = uMPS.gauge().reduced_density_mat(3)
+    # check gauge transform
+    p = uMPS.reduced_density_mat(3)
+    Up = uMPS.gauge().reduced_density_mat(3)
 
-    # assert np.allclose(p, Up)
+    assert np.allclose(p, Up)
 
-    # assert np.allclose(
-    #     ncon((p, Up), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5))),
-    #     ncon((p, p), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5))),
-    #     ncon((Up, Up), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5)))
-    # )
+    assert np.allclose(
+        ncon((p, Up), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5))),
+        ncon((p, p), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5))),
+        ncon((Up, Up), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5)))
+    )
 
-    # assert np.allclose(E.tensor, ncon(((E ** 0).tensor, E.tensor), ((-1, -2, 1, 2), (1, 2, -3, -4))))
+    assert np.allclose(E.tensor, ncon(((E ** 0).tensor, E.tensor), ((-1, -2, 1, 2), (1, 2, -3, -4))))
 
-    # print("All assertions passed!")
-
-
-    A = UniformMPS.from_file("data/isometries/A.npy")
-    B = UniformMPS.from_file("data/isometries/B.npy")
+    print("All assertions passed!")

@@ -94,7 +94,6 @@ class HilbertSchmidt(AbstractCostFunction):
 
         return res
 
-
 class EvolvedHilbertSchmidt(AbstractCostFunction):
 
     def __init__(self, A: UniformMPS, B: UniformMPS, U1: np.ndarray, U2: np.ndarray, L: int):
@@ -114,21 +113,29 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         indices = ((1, 2, -1, -3), (-2, 1, 3), (3, 2, -4))
         self.right_auxillary = ncon(tensors, indices)
 
+        # calculate left dangling tensor
         tensors = (A.tensor, A.tensor, U1, np.conj(U1), A.conj, A.conj)
-        indices = ((-1, 1, 2), (2, 3, -3), (1, 3, 4, -4), (5, 6, 4, -5), (-2, 5, 7), (7, 6, -6))
+        indices = ((1, 2, 3), (3, 4, -1), (2, 4, 5, -2), (6, 7, 5, -3), (1, 6, 8), (8, 7, -4))
         tmp = ncon(tensors, indices)
 
         tensors = (tmp, tmp)
-        indices = ((-1, -4, -5, 1, 2, -8), (-3, -2, -7, 2, 1, -6))
+        indices = ((-1, 1, 2, -4), (-3, 2, 1, -2))
+        tmp_left = ncon(tensors, indices)
+
+        # calculate right dangling tensor
+        tensors = (A.tensor, A.tensor, U1, np.conj(U1), A.conj, A.conj, self.rA.tensor)
+        indices = ((-1, 1, 2), (2, 3, 4), (1, 3, -2, 5), (6, 7, -3, 5), (-4, 6, 8), (8, 7, 9), (4, 9))
         tmp = ncon(tensors, indices)
+
+        tensors = (tmp, tmp)
+        indices = ((-1, 1, 2, -4), (-3, 2, 1, -2))
+        tmp_right = ncon(tensors, indices)
 
         AAdag = TransferMatrix.new(A, A)
         T_AA = (AAdag ** (L-2)).tensor
-        tensors = (tmp, T_AA, T_AA, tmp, self.rA.tensor, self.rA.tensor)
-        indices = ((1, 2, 2, 1, 3, 4, 5, 6), (3, 4, 7, 8), (5, 6, 9, 10), (11, 12, 13, 14, 7, 8, 9, 10), (11, 14), (13, 12))
+        tensors = (tmp_left, T_AA, T_AA, tmp_right)
+        indices = ((1, 2, 3, 4), (1, 2, 5, 6), (3, 4, 7, 8), (5, 6, 7, 8))
         self.costAA = ncon(tensors, indices) / (np.sqrt(A.d) * np.sqrt(A.d))
-
-
 
     def cost(self):
         A, B = self.A, self.B
@@ -170,7 +177,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         if self.rB is None:
             self.rB = RightFixedPoint(BBdag)
 
-        rA, rB = self.rA, self.rB
+        rB = self.rB
 
         T_BB = BBdag ** self.L
         T_BA = BAdag ** (self.L / 2)

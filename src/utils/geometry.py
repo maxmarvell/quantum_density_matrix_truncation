@@ -2,18 +2,8 @@ from uniform_MPS import UniformMPS
 from ncon import ncon
 import numpy as np
 from scipy.linalg import expm
-from cost import AbstractCostFunction
 from fixed_point import RightFixedPoint
-
-def project_tangent_grassman(B: UniformMPS, D: np.ndarray):
-    return D - ncon((B.tensor, B.conj, D), ((-1, -2, 3), (1, 2, 3), (1, 2, -3)))
-
-def project_tangent_stiefel(B: UniformMPS, D: np.ndarray):
-    d, p = B.d, B.p
-    A = B.matrix
-    D = D.reshape((d*p, d))
-    res = D - 0.5 * A @ (np.conj(A).T @ D + np.conj(D).T @ A)
-    return res.reshape((d, p, d))
+from abc import ABC, abstractmethod
 
 def preconditioning(G: np.ndarray, r: RightFixedPoint):
     d, _ = r.shape
@@ -21,21 +11,43 @@ def preconditioning(G: np.ndarray, r: RightFixedPoint):
     Rinv = np.linalg.inv(r.tensor + np.eye(d)*delta)
     return G @ Rinv
 
-def grassman_retraction(B: UniformMPS, D: np.ndarray, alpha: float, r: RightFixedPoint):
-    G = project_tangent_grassman(B, D)
-    G = preconditioning(G, r)
-    return B.tensor - alpha * G
+class Projector(ABC):
+    @abstractmethod
+    def project(self, A: UniformMPS, D: np.ndarray):
+        pass
 
-def steifel_retraction(B: UniformMPS, D: np.ndarray, alpha: float, r: RightFixedPoint):
-    G = project_tangent_stiefel(B, D)
-    G = preconditioning(G, r)
-    return B.tensor - alpha * G
+class IdentityProjector(Projector):
+    def project(self, A, D):
+        return D
 
-def simple_retraction(W, G, alpha):
-    """
-        Perform a simple retraction on isometry W
-    """
-    return W - G * alpha
+class GrassmanProjector(Projector):
+    def project(self, A, D):
+        return D - ncon((A.tensor, A.conj, D), ((-1, -2, 3), (1, 2, 3), (1, 2, -3)))
+
+class SteifelProjector(Projector):
+    def project(self, A, D):
+        d, p = A.d, A.p
+        A = A.matrix
+        D = D.reshape((d*p, d))
+        res = D - 0.5 * A @ (np.conj(A).T @ D + np.conj(D).T @ A)
+        return res.reshape((d, p, d))
+
+class Retraction(ABC):
+    def __init__(self, projector: Projector, preconditioning: bool = True):
+        self.projector = projector
+        self.preconditioning = preconditioning
+
+    @abstractmethod
+    def retract(self):
+        pass
+
+class RiemannianGradientDescent(Retraction):
+    def retract(self, A: UniformMPS, D: np.ndarray, alpha: float, r: RightFixedPoint = None):
+        G = self.projector.project(A, D)
+        if self.preconditioning:
+            G = preconditioning(G, r)
+        return A.tensor - G * alpha 
+
 
 # def grassman_retraction(W, G, alpha):
 #     '''

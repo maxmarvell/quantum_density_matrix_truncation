@@ -25,4 +25,5 @@ if __name__ == "__main__":
     U = transverse_ising(0.1)
 
     assert np.allclose(ncon((U, np.conj(U)), ((-1, -2, 1, 2), (-3, -4, 1, 2))).reshape(4, 4), np.eye(4))
+    assert np.allclose(ncon((np.conj(U), U), ((-1, -2, 1, 2), (-3, -4, 1, 2))).reshape(4, 4), np.eye(4))
     assert np.allclose(U.reshape(4, 4) @ np.conj(U).transpose(2, 3, 0, 1).reshape(4, 4), np.eye(4))

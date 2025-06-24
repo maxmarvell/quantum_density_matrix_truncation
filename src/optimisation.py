@@ -4,22 +4,23 @@ from scipy.linalg import polar
 
 class OpimisationProblem():
     
-    def __init__(self, f: AbstractCostFunction, alpha: float = 0.1):
+    def __init__(self, f: AbstractCostFunction, retr: Retraction, alpha: float = 0.1):
         self.f = f
         self.alpha = alpha
+        self.retr = retr
 
-    def update(self, retraction):
+    def update(self):
         D = self.f.derivative()
-        B = retraction(self.f.B, D, self.alpha, self.f.rB)
+        B = self.retr.retract(self.f.B, D, self.alpha, self.f.rB)
         n, p, _ = B.shape
         _B, _ = polar(B.reshape(n*p, n))
         return UniformMPS(_B.reshape(n, p, n))
     
-    def optimize(self, retraction, n_iter: int, tol: float):
+    def optimize(self, n_iter: int, tol: float):
         print(f"Initial cost: {self.f.cost()}")
 
         for i in range(n_iter):
-            self.f.B = self.update(retraction)
+            self.f.B = self.update()
             self.f.rB = None 
 
             if i % 100 == 0:
@@ -30,8 +31,8 @@ class OpimisationProblem():
                     
 if __name__ == "__main__":
 
-    Da = 6
-    Db = 6
+    Da = 4
+    Db = 4
     p = 2
 
     A = UniformMPS.from_random(Da, p)
@@ -43,10 +44,21 @@ if __name__ == "__main__":
 
     from cost import EvolvedHilbertSchmidt, HilbertSchmidt
 
-    f = EvolvedHilbertSchmidt(A, B, U, U, 2)
-    Op = OpimisationProblem(f)
-    Op.optimize(grassman_retraction, 1000, 1e-5)
+    # f = EvolvedHilbertSchmidt(A, A, U, U, 10)
+    # Op = OpimisationProblem(f)
+    # Op.optimize(grassman_retraction, 5000, 1e-5)
 
-    f = HilbertSchmidt(A, B, 2)
-    Op = OpimisationProblem(f)
-    Op.optimize(grassman_retraction, 1000, 1e-10)
+    # f = EvolvedHilbertSchmidt(A, B, U, U, 4)
+    # Op = OpimisationProblem(f)
+    # Op.optimize(grassman_retraction, 1000, 1e-5)
+
+    proj = GrassmanProjector()
+    retr = RiemannianGradientDescent(proj, True)
+
+    # f = EvolvedHilbertSchmidt(A, B, U, U, 2)
+    # Op = OpimisationProblem(f, retr, 0.01)
+    # Op.optimize(10000, 1e-5)
+
+    f = HilbertSchmidt(A, B, 20)
+    Op = OpimisationProblem(f, retr, 0.1)
+    Op.optimize(5000, 1e-10)
