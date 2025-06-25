@@ -1,6 +1,5 @@
 from utils.geometry import *
 from cost import AbstractCostFunction
-from scipy.linalg import polar
 from uniform_MPS import UniformMPS
 
 class OpimisationProblem():
@@ -13,16 +12,14 @@ class OpimisationProblem():
     def update(self):
         D = self.f.derivative()
         B = self.g.update(self.f.B.tensor, D, self.alpha, self.f.rB.tensor)
-        n, p, _ = B.shape
-        _B, _ = polar(B.reshape(n*p, n))
-        return UniformMPS(_B.reshape(n, p, n))
+        return UniformMPS(B)
     
     def optimize(self, n_iter: int, tol: float):
         print(f"Initial cost: {self.f.cost()}")
 
         for i in range(n_iter):
             self.f.B = self.update()
-            self.f.rB = None 
+            self.f.rB = None
 
             if i % 100 == 0:
                 C = self.f.cost()
@@ -32,8 +29,8 @@ class OpimisationProblem():
                     
 if __name__ == "__main__":
 
-    Da = 4
-    Db = 4
+    Da = 5
+    Db = 5
     p = 2
 
     A = UniformMPS.from_random(Da, p)
@@ -54,12 +51,21 @@ if __name__ == "__main__":
     # Op.optimize(grassman_retraction, 1000, 1e-5)
 
     proj = GrassmanProjector()
-    g = Retraction(proj, False)
+    g = Retraction(proj, True)
 
     # f = EvolvedHilbertSchmidt(A, B, U, U, 2)
     # Op = OpimisationProblem(f, retr, 0.01)
     # Op.optimize(10000, 1e-5)
 
-    f = HilbertSchmidt(A, B, 20)
+    f = HilbertSchmidt(A, B, 10)
     Op = OpimisationProblem(f, g, 0.1)
-    Op.optimize(5000, 1e-10)
+    Op.optimize(10, 1e-10)
+
+    print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(Db, dtype=np.complex128), rtol=1e-12))
+
+    g = GradientDescent(proj, True)
+    f = HilbertSchmidt(A, B, 10)
+    Op = OpimisationProblem(f, g, 0.1)
+    Op.optimize(10, 1e-10)
+
+    print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(Db, dtype=np.complex128), rtol=1e-12))

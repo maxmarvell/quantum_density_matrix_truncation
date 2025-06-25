@@ -1,11 +1,12 @@
 from ncon import ncon
 import numpy as np
-from scipy.linalg import expm
+from scipy.linalg import expm, polar
 from abc import ABC, abstractmethod
 
 def preconditioning(G: np.ndarray, r: np.ndarray) -> np.ndarray:
     d, _ = r.shape
     delta = np.linalg.norm(G.reshape((-1, d)))**2
+    print(delta)
     Rinv = np.linalg.inv(r + np.eye(d)*delta)
     return G @ Rinv
 
@@ -44,7 +45,10 @@ class GradientDescent(AbstractUpdate):
         G = self.projector.project(A, D)
         if self.preconditioning:
             G = preconditioning(G, r)
-        return A - G * alpha
+        A_new = A - G * alpha
+        d, p, _ = A_new.shape
+        _A, _ = polar(A_new.reshape(d*p, d))
+        return _A.reshape(d, p, d)
     
 class Retraction(AbstractUpdate):
     def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
@@ -53,10 +57,8 @@ class Retraction(AbstractUpdate):
         if self.preconditioning:
             G = preconditioning(G, r)
 
-        Q_x = ncon((G, np.conj(A)), ((-1, 2, 3), (-2, 2, 3))) + ncon((A, np.conj(G)), ((-1, 2, 3), (-2, 2, 3)))
-        print(Q_x.shape)
-        print(expm(alpha*Q_x).shape)
-        return ncon((expm(alpha*Q_x), A), ((-1, 1), (1, -2, -3)))
+        Q_x = ncon((G, np.conj(A)), ((-1, 2, 3), (-2, 2, 3))) - ncon((A, np.conj(G)), ((-1, 2, 3), (-2, 2, 3)))
+        return ncon((expm(-alpha*Q_x), A), ((-1, 1), (1, -2, -3)))
 
         # A = A.reshape(d*p, d)
         # G = G.reshape(d*p, d)
