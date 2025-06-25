@@ -36,8 +36,6 @@ def test_grassman_euclidian_retraction():
     R = Retraction(P, False)
 
     D = f.derivative()
-    B_new = R.update(B.tensor, D, 0.0001)
-    I = ncon((np.conj(B_new), B_new), ((1, 2, -1), (1, 2, -2)))
-
-    assert np.allclose(I, np.eye(d, dtype=np.complex128), rtol=1e-2)
+    B_new = R.update(B.tensor, D, 0.01)
+    assert np.allclose(ncon((np.conj(B_new), B_new), ((1, 2, -1), (1, 2, -2))), np.eye(d, dtype=np.complex128), rtol=1e-12)
 
