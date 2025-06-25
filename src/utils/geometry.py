@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 def preconditioning(G: np.ndarray, r: np.ndarray) -> np.ndarray:
     d, _ = r.shape
     delta = np.linalg.norm(G.reshape((-1, d)))**2
-    print(delta)
+    # print(delta)
     Rinv = np.linalg.inv(r + np.eye(d)*delta)
     return G @ Rinv
 
@@ -52,22 +52,44 @@ class GradientDescent(AbstractUpdate):
     
 class Retraction(AbstractUpdate):
     def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
+
+        d, p, _ = A.shape
+        Y = A.reshape(d*p, d)
+        # F_Y = D.reshape(d*p, d)
         
         G = self.projector.project(A, D)
+
         if self.preconditioning:
             G = preconditioning(G, r)
 
-        Q_x = ncon((G, np.conj(A)), ((-1, 2, 3), (-2, 2, 3))) - ncon((A, np.conj(G)), ((-1, 2, 3), (-2, 2, 3)))
-        return ncon((expm(-alpha*Q_x), A), ((-1, 1), (1, -2, -3)))
+        U, s, Vh = np.linalg.svd(-G.reshape(d*p, d), full_matrices=False)
+        V = Vh.conj().T
 
-        # A = A.reshape(d*p, d)
-        # G = G.reshape(d*p, d)
+        t = alpha # Step size
+        
+        # Geodesic formula from paper (2.65) and (3.1)
+        Y_new_mat = (Y @ V) @ np.diag(np.cos(s * t)) @ Vh + U @ np.diag(np.sin(s * t)) @ Vh
+        
+        return Y_new_mat.reshape(d, p, d)
 
-        # a = np.block([A, alpha*G])
-        # b = np.block([
-        #     [Zero, -alpha**2 * G.conj().T @ G],
-        #     [I, Zero]
-        # ])
-        # b = expm(b)[..., :d*p]
+class TestRetraction(AbstractUpdate):
+    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
 
-        # return a @ b
+        G = self.projector.project(A, D)
+        d, _, _ = A.shape
+
+        if self.preconditioning:
+            G = -preconditioning(G, r)
+
+        Zero = np.zeros((d, d))
+        I = np.eye(d)
+
+        a = np.block([A, alpha*G])
+        GhG = ncon((np.conj(G), G), ((1, 2, -1), (1, 2, -2)))
+        b = np.block([
+            [Zero, -alpha**2 * GhG],
+            [I, Zero]
+        ])
+        b = expm(b)[..., :d]
+
+        return a @ b

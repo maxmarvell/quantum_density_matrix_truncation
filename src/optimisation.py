@@ -21,6 +21,10 @@ class OpimisationProblem():
             self.f.B = self.update()
             self.f.rB = None
 
+            # if i > 0 and i % 500 == 0:
+            #     self.alpha /= 5.0 
+            #     print(f"Reducing learning rate to {self.alpha}")
+
             if i % 100 == 0:
                 C = self.f.cost()
                 print(f"Iteration {i}: {C}")
@@ -51,21 +55,26 @@ if __name__ == "__main__":
     # Op.optimize(grassman_retraction, 1000, 1e-5)
 
     proj = GrassmanProjector()
-    g = Retraction(proj, True)
+    g = TestRetraction(proj, True)
 
     # f = EvolvedHilbertSchmidt(A, B, U, U, 2)
     # Op = OpimisationProblem(f, retr, 0.01)
     # Op.optimize(10000, 1e-5)
 
-    f = HilbertSchmidt(A, B, 10)
+    f = HilbertSchmidt(A, B, L=2)
     Op = OpimisationProblem(f, g, 0.1)
-    Op.optimize(10, 1e-10)
+    Op.optimize(1000, 1e-10)
 
-    print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(Db, dtype=np.complex128), rtol=1e-12))
+    # print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(Db, dtype=np.complex128), rtol=1e-12))
 
     g = GradientDescent(proj, True)
-    f = HilbertSchmidt(A, B, 10)
+    f = HilbertSchmidt(A, B, L=2)
     Op = OpimisationProblem(f, g, 0.1)
-    Op.optimize(10, 1e-10)
+    Op.optimize(1000, 1e-10)
+
+    g = Retraction(proj, False)
+    f = HilbertSchmidt(A, B, L=2)
+    Op = OpimisationProblem(f, g, 0.1)
+    Op.optimize(1000, 1e-10)
 
     print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(Db, dtype=np.complex128), rtol=1e-12))
