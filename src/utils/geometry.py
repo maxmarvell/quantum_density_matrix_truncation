@@ -53,18 +53,19 @@ class Retraction(AbstractUpdate):
         if self.preconditioning:
             G = preconditioning(G, r)
 
-        d, p, _ = A.shape
-        Zero = np.zeros((d*p, d*p))
-        I = np.eye(d*p)
+        Q_x = ncon((G, np.conj(A)), ((-1, 2, 3), (-2, 2, 3))) + ncon((A, np.conj(G)), ((-1, 2, 3), (-2, 2, 3)))
+        print(Q_x.shape)
+        print(expm(alpha*Q_x).shape)
+        return ncon((expm(alpha*Q_x), A), ((-1, 1), (1, -2, -3)))
 
-        A = A.reshape(d*p, d)
-        G = G.reshape(d*p, d)
+        # A = A.reshape(d*p, d)
+        # G = G.reshape(d*p, d)
 
-        a = np.block([A, alpha*G])
-        b = np.block([
-            [Zero, -alpha**2 * G.conj().T @ G],
-            [I, Zero]
-        ])
-        b = expm(b)[..., :d*p]
+        # a = np.block([A, alpha*G])
+        # b = np.block([
+        #     [Zero, -alpha**2 * G.conj().T @ G],
+        #     [I, Zero]
+        # ])
+        # b = expm(b)[..., :d*p]
 
-        return a @ b
+        # return a @ b

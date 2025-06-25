@@ -1,6 +1,7 @@
 from utils.geometry import *
 from cost import AbstractCostFunction
 from scipy.linalg import polar
+from uniform_MPS import UniformMPS
 
 class OpimisationProblem():
     
@@ -53,7 +54,7 @@ if __name__ == "__main__":
     # Op.optimize(grassman_retraction, 1000, 1e-5)
 
     proj = GrassmanProjector()
-    g = Retraction(proj, True)
+    g = Retraction(proj, False)
 
     # f = EvolvedHilbertSchmidt(A, B, U, U, 2)
     # Op = OpimisationProblem(f, retr, 0.01)
