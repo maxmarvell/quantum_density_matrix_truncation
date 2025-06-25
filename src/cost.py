@@ -15,16 +15,15 @@ class AbstractCostFunction(ABC):
 
         AAdag = TransferMatrix.new(self.A, self.A)
         self.rA = RightFixedPoint(AAdag)
-
         self.rB = None
 
     
     @abstractmethod
-    def cost(self):
+    def cost(self) -> np.complex128:
         pass
 
     @abstractmethod
-    def derivative(self):
+    def derivative(self) -> np.ndarray:
         pass
 
 class HilbertSchmidt(AbstractCostFunction):

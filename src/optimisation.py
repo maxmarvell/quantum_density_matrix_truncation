@@ -4,14 +4,14 @@ from scipy.linalg import polar
 
 class OpimisationProblem():
     
-    def __init__(self, f: AbstractCostFunction, retr: Retraction, alpha: float = 0.1):
+    def __init__(self, f: AbstractCostFunction, g: AbstractUpdate, alpha: float = 0.1):
         self.f = f
         self.alpha = alpha
-        self.retr = retr
+        self.g = g
 
     def update(self):
         D = self.f.derivative()
-        B = self.retr.retract(self.f.B, D, self.alpha, self.f.rB)
+        B = self.g.update(self.f.B.tensor, D, self.alpha, self.f.rB.tensor)
         n, p, _ = B.shape
         _B, _ = polar(B.reshape(n*p, n))
         return UniformMPS(_B.reshape(n, p, n))
@@ -53,12 +53,12 @@ if __name__ == "__main__":
     # Op.optimize(grassman_retraction, 1000, 1e-5)
 
     proj = GrassmanProjector()
-    retr = RiemannianGradientDescent(proj, True)
+    g = Retraction(proj, True)
 
     # f = EvolvedHilbertSchmidt(A, B, U, U, 2)
     # Op = OpimisationProblem(f, retr, 0.01)
     # Op.optimize(10000, 1e-5)
 
     f = HilbertSchmidt(A, B, 20)
-    Op = OpimisationProblem(f, retr, 0.1)
+    Op = OpimisationProblem(f, g, 0.1)
     Op.optimize(5000, 1e-10)

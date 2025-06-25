@@ -1,66 +1,70 @@
-from uniform_MPS import UniformMPS
 from ncon import ncon
 import numpy as np
 from scipy.linalg import expm
-from fixed_point import RightFixedPoint
 from abc import ABC, abstractmethod
 
-def preconditioning(G: np.ndarray, r: RightFixedPoint):
+def preconditioning(G: np.ndarray, r: np.ndarray) -> np.ndarray:
     d, _ = r.shape
     delta = np.linalg.norm(G.reshape((-1, d)))**2
-    Rinv = np.linalg.inv(r.tensor + np.eye(d)*delta)
+    Rinv = np.linalg.inv(r + np.eye(d)*delta)
     return G @ Rinv
 
-class Projector(ABC):
+class AbstractProjector(ABC):
     @abstractmethod
-    def project(self, A: UniformMPS, D: np.ndarray):
+    def project(self, A: np.ndarray, D: np.ndarray) -> np.ndarray:
         pass
 
-class IdentityProjector(Projector):
-    def project(self, A, D):
+class IdentityProjector(AbstractProjector):
+    def project(self, A: np.ndarray, D: np.ndarray) -> np.ndarray:
         return D
 
-class GrassmanProjector(Projector):
-    def project(self, A, D):
-        return D - ncon((A.tensor, A.conj, D), ((-1, -2, 3), (1, 2, 3), (1, 2, -3)))
+class GrassmanProjector(AbstractProjector):
+    def project(self, A: np.ndarray, D: np.ndarray) -> np.ndarray:
+        return D - ncon((A, np.conj(A), D), ((-1, -2, 3), (1, 2, 3), (1, 2, -3)))
 
-class SteifelProjector(Projector):
-    def project(self, A, D):
-        d, p = A.d, A.p
-        A = A.matrix
+class SteifelProjector(AbstractProjector):
+    def project(self, A: np.ndarray, D: np.ndarray) -> np.ndarray:
+        d, p, _ = A.shape
+        A = A.reshape((d*p, d))
         D = D.reshape((d*p, d))
         res = D - 0.5 * A @ (np.conj(A).T @ D + np.conj(D).T @ A)
         return res.reshape((d, p, d))
-
-class Retraction(ABC):
-    def __init__(self, projector: Projector, preconditioning: bool = True):
+    
+class AbstractUpdate(ABC):
+    def __init__(self, projector: AbstractProjector, preconditioning: bool = True):
         self.projector = projector
         self.preconditioning = preconditioning
 
     @abstractmethod
-    def retract(self):
+    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
         pass
 
-class RiemannianGradientDescent(Retraction):
-    def retract(self, A: UniformMPS, D: np.ndarray, alpha: float, r: RightFixedPoint = None):
+class GradientDescent(AbstractUpdate):
+    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
         G = self.projector.project(A, D)
         if self.preconditioning:
             G = preconditioning(G, r)
-        return A.tensor - G * alpha 
+        return A - G * alpha
+    
+class Retraction(AbstractUpdate):
+    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
+        
+        G = self.projector.project(A, D)
+        if self.preconditioning:
+            G = preconditioning(G, r)
 
+        d, p, _ = A.shape
+        Zero = np.zeros((d*p, d*p))
+        I = np.eye(d*p)
 
-# def grassman_retraction(W, G, alpha):
-#     '''
-#         Peform a geodesic retraction on the Grassmann manifold based on the Euclidean metric.
-#     '''
-#     n, m = W.shape
-#     Q, R = np.linalg.qr((np.eye(n) - W @ W.conj().T) @ G, mode='reduced')
-#     Zero = np.zeros((m, m))
+        A = A.reshape(d*p, d)
+        G = G.reshape(d*p, d)
 
-#     a = np.block([W, Q])
-#     b = np.block([
-#         [Zero, -alpha*R.conj().T],
-#         [alpha*R, Zero]
-#     ])
-#     b = expm(b)[..., :m]
-#     return a @ b
+        a = np.block([A, alpha*G])
+        b = np.block([
+            [Zero, -alpha**2 * G.conj().T @ G],
+            [I, Zero]
+        ])
+        b = expm(b)[..., :d*p]
+
+        return a @ b
