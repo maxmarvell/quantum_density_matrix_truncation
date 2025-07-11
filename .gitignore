@@ -3,3 +3,9 @@ venv/
 data/
 .gitignore
 .pytest_cache/
+src/test.py
+src/test_cost.py
+app/
+scripts/
+.vscode/
+.DS_store

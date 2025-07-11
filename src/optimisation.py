@@ -1,6 +1,6 @@
 from utils.geometry import *
 from cost import AbstractCostFunction
-from uniform_MPS import UniformMPS
+from uniform_mps import UniformMps
 
 class OpimisationProblem():
     
@@ -11,70 +11,46 @@ class OpimisationProblem():
 
     def update(self):
         D = self.f.derivative()
-        B = self.g.update(self.f.B.tensor, D, self.alpha, self.f.rB.tensor)
-        return UniformMPS(B)
+        B, norm = self.g.update(self.f.B.tensor, D, self.alpha, self.f.rB.tensor)
+        return UniformMps(B), norm
     
-    def optimize(self, n_iter: int, tol: float):
+    def optimize(self, max_iters: int, tol: float, verbose: bool = False) -> tuple[UniformMps, np.complex128]:
         print(f"Initial cost: {self.f.cost()}")
 
-        for i in range(n_iter):
-            self.f.B = self.update()
-            self.f.rB = None
+        norm = tol
+        for i in range(max_iters):
+            self.f.B, norm = self.update()
 
-            # if i > 0 and i % 500 == 0:
-            #     self.alpha /= 5.0 
-            #     print(f"Reducing learning rate to {self.alpha}")
+            if verbose and i % 100 == 0:
+                print(f"Iteration {i}:")
+                print(f"\tCost - {np.abs(self.f.cost())}")
+                print(f"\tGradient Norm - {norm}")
 
-            if i % 100 == 0:
-                C = self.f.cost()
-                print(f"Iteration {i}: {C}")
-                if C < tol:
-                    break
+            if norm < tol:
+                print("\nConverged!")
+                print(f"Iteration {i}:")
+                print(f"\tCost - {np.abs(self.f.cost())}")
+                print(f"\tGradient Norm - {norm}")
+                break
+
+
+        return self.f.B, np.abs(self.f.cost()), np.abs(norm)
                     
 if __name__ == "__main__":
 
-    Da = 5
-    Db = 5
+    d = 4
     p = 2
 
-    A = UniformMPS.from_random(Da, p)
-    B = UniformMPS.from_random(Db, p)
-
-    # generate unitary
-    from utils.unitary import transverse_ising
-    U = transverse_ising(0.1)
-
-    from cost import EvolvedHilbertSchmidt, HilbertSchmidt
-
-    # f = EvolvedHilbertSchmidt(A, A, U, U, 10)
-    # Op = OpimisationProblem(f)
-    # Op.optimize(grassman_retraction, 5000, 1e-5)
-
-    # f = EvolvedHilbertSchmidt(A, B, U, U, 4)
-    # Op = OpimisationProblem(f)
-    # Op.optimize(grassman_retraction, 1000, 1e-5)
+    A = UniformMps.new(d, p)
+    
+    from model import TransverseFieldIsing
+    from cost import EvolvedHilbertSchmidt
+    tfim = TransverseFieldIsing(0.1, 0.1)
 
     proj = GrassmanProjector()
-    g = TestRetraction(proj, True)
-
-    # f = EvolvedHilbertSchmidt(A, B, U, U, 2)
-    # Op = OpimisationProblem(f, retr, 0.01)
-    # Op.optimize(10000, 1e-5)
-
-    f = HilbertSchmidt(A, B, L=2)
-    Op = OpimisationProblem(f, g, 0.1)
-    Op.optimize(1000, 1e-10)
-
-    # print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(Db, dtype=np.complex128), rtol=1e-12))
-
     g = GradientDescent(proj, True)
-    f = HilbertSchmidt(A, B, L=2)
-    Op = OpimisationProblem(f, g, 0.1)
-    Op.optimize(1000, 1e-10)
+    f = EvolvedHilbertSchmidt(A, A, tfim, 4, trotterization_order=2)
+    Op = OpimisationProblem(f, g, .1)
+    Op.optimize(1000, 1e-10, verbose=True)
+    print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(d, dtype=np.complex128), rtol=1e-12))
 
-    g = Retraction(proj, False)
-    f = HilbertSchmidt(A, B, L=2)
-    Op = OpimisationProblem(f, g, 0.1)
-    Op.optimize(1000, 1e-10)
-
-    print(np.allclose(ncon((Op.f.B.conj, Op.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(Db, dtype=np.complex128), rtol=1e-12))

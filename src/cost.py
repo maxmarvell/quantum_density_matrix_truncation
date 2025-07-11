@@ -1,21 +1,37 @@
 from abc import ABC, abstractmethod
-
 from ncon import ncon
 import numpy as np
-from uniform_MPS import UniformMPS
-from transfer_matrix import *
+import numpy.typing as npt
+from uniform_mps import UniformMps
+from transfer_matrix import (
+    FirstOrderTrotterizedTransferMatrix as FirstOrder,
+    SecondOrderTrotterizedTransferMatrix as SecondOrder,
+    TransferMatrix
+)
 from fixed_point import RightFixedPoint
+from typing import Self
+from model import AbstractModel
+from utils.mps import trotter_step
 
 class AbstractCostFunction(ABC):
 
-    def __init__(self, A: UniformMPS, B: UniformMPS, L: int):
+    def __init__(self, A: UniformMps, B: UniformMps, L: int):
+        self.L = L
         self.A = A
         self.B = B
-        self.L = L
 
         AAdag = TransferMatrix.new(self.A, self.A)
         self.rA = RightFixedPoint(AAdag)
-        self.rB = None
+
+    @property
+    def B(self) -> UniformMps:
+        return self._B
+    
+    @B.setter
+    def B(self, value):
+        self._B = value
+        BBdag = TransferMatrix.new(value, value)
+        self.rB = RightFixedPoint(BBdag)
 
     
     @abstractmethod
@@ -28,219 +44,440 @@ class AbstractCostFunction(ABC):
 
 class HilbertSchmidt(AbstractCostFunction):
 
-    def cost(self):
+    def __init__(self, A, B, L):
+        super().__init__(A, B, L)
 
-        ABdag, BAdag = transfer_blocks(self.A, self.B)
+        # compute and store the cost of rho(A)^2
         AAdag = TransferMatrix.new(self.A, self.A)
+        T_AA = AAdag.__pow__(L).tensor
+        self.costAA  = ncon((T_AA, T_AA, self.rA.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
+
+
+    def cost(self:Self) -> np.float64:
+
+        ABdag = TransferMatrix.new(self.A, self.B)
+        BAdag = TransferMatrix.new(self.B, self.A)
         BBdag = TransferMatrix.new(self.B, self.B)
 
-        Da, Db = self.A.d, self.B.d
-
-        if self.rB is None:
-            self.rB = RightFixedPoint(BBdag)
-
+        L = self.L
         res = 0
 
         # rho(B)^2 contribution
-        T_BB = (BBdag ** self.L).tensor
-        res += ncon((T_BB, T_BB, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6))) / (np.sqrt(Db) * np.sqrt(Db))
+        T_BB = BBdag.__pow__(L).tensor
+        res += ncon((T_BB, T_BB, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
 
         # rho(A)^2 contribution
-        T_AA = (AAdag ** self.L).tensor
-        res += ncon((T_AA, T_AA, self.rA.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6))) / (np.sqrt(Da) * np.sqrt(Da))
+        res += self.costAA
 
         # 2rho(A)rho(B) contribution
-        T_AB = (ABdag ** self.L).tensor
-        T_BA = (BAdag ** self.L).tensor
-        res -= 2 * ncon((T_AB, T_BA, self.rB.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6))) / (np.sqrt(Da) * np.sqrt(Db))
+        T_AB = ABdag.__pow__(L).tensor
+        T_BA = BAdag.__pow__(L).tensor
+        res -= 2 * ncon((T_AB, T_BA, self.rB.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
 
-        return res
+        return np.abs(res)
     
     def derivative(self):
 
-        ABdag, BAdag = transfer_blocks(self.A, self.B)
+        ABdag = TransferMatrix.new(self.A, self.B)
+        BAdag = TransferMatrix.new(self.B, self.A)
         BBdag = TransferMatrix.new(self.B, self.B)
 
-        Da, Db = self.A.d, self.B.d
-
-        if self.rB is None:
-            self.rB = RightFixedPoint(BBdag)
-
-        res = np.zeros_like(self.B.tensor, complex)
+        L = self.L
+        res = np.zeros_like(self.B.tensor, np.complex128)
 
         # rho(B)^2 contribution
-        T_BB = (BBdag ** self.L)
+        T_BB = BBdag.__pow__(L)
         D = T_BB.derivative()
-        res += 2 * ncon((D, T_BB.tensor, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6))) / (np.sqrt(Db) * np.sqrt(Db))
+        res += 2 * ncon((D, T_BB.tensor, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6)))
 
         # right fixed point
         tensors = (T_BB.tensor, T_BB.tensor, self.rB.tensor)
         indices = ((1, 2, 3, -1), (2, 1, -2, 4), (3, 4))
         v = ncon(tensors, indices)
-        res += 2 * self.rB.derivative(v) / (np.sqrt(Db) * np.sqrt(Db))
+        res += 2 * self.rB.derivative(v)
 
         # 2rho(A)rho(B) contribution
-        T_AB = (ABdag ** self.L)
-        T_BA = (BAdag ** self.L)
+        T_AB = ABdag.__pow__(L)
+        T_BA = BAdag.__pow__(L)
         D = T_AB.derivative()
-        res -= 2 * ncon((D, T_BA.tensor, self.rB.tensor, self.rA.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6))) / (np.sqrt(Da) * np.sqrt(Db))
+        res -= 2 * ncon((D, T_BA.tensor, self.rB.tensor, self.rA.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6)))
 
         # right fixed point
         tensors = (T_AB.tensor, T_BA.tensor, self.rA.tensor)
         indices = ((1, 2, 3, -1), (2, 1, -2, 4), (3, 4))
         v = ncon(tensors, indices)
-        res -= 2 * self.rB.derivative(v) / (np.sqrt(Da) * np.sqrt(Db))
+        res -= 2 * self.rB.derivative(v)
 
         return res
 
 class EvolvedHilbertSchmidt(AbstractCostFunction):
 
-    def __init__(self, A: UniformMPS, B: UniformMPS, U1: np.ndarray, U2: np.ndarray, L: int):
+    def __init__(self, A: UniformMps, B: UniformMps, model: AbstractModel, L: int, trotterization_order: int = 2):
 
-        if L % 2 != 0:
-            return NotImplemented
-        
         super().__init__(A, B, L)
-        self.U1 = U1
-        self.U2 = U2
 
-        tensors = (A.tensor, A.tensor, self.U1)
-        indices = ((-1, 1, 2), (2, 3, -3), (1, 3, -2, -4))
-        self.left_auxillary = ncon(tensors, indices)
+        self.trotterization_order = trotterization_order
 
-        tensors = (np.conj(self.U1), A.conj, A.conj)
-        indices = ((1, 2, -1, -3), (-2, 1, 3), (3, 2, -4))
-        self.right_auxillary = ncon(tensors, indices)
+        if trotterization_order == 1:
+            self.U1, self.U2 = model.trotter_first_order()
 
-        # calculate left dangling tensor
-        tensors = (A.tensor, A.tensor, U1, np.conj(U1), A.conj, A.conj)
-        indices = ((1, 2, 3), (3, 4, -1), (2, 4, 5, -2), (6, 7, 5, -3), (1, 6, 8), (8, 7, -4))
-        tmp = ncon(tensors, indices)
+            # compute all invarients of the cost function
+            self.purity_A = self._compute_first_totterized_purity()
+            self.left_auxillary = self._compute_left_auxillary_first_trotterized_overlap()
+            self.right_auxillary = self._compute_right_auxillary_first_trotterized_overlap()
 
-        tensors = (tmp, tmp)
-        indices = ((-1, 1, 2, -4), (-3, 2, 1, -2))
-        tmp_left = ncon(tensors, indices)
+        elif trotterization_order == 2:
 
-        # calculate right dangling tensor
-        tensors = (A.tensor, A.tensor, U1, np.conj(U1), A.conj, A.conj, self.rA.tensor)
-        indices = ((-1, 1, 2), (2, 3, 4), (1, 3, -2, 5), (6, 7, -3, 5), (-4, 6, 8), (8, 7, 9), (4, 9))
-        tmp = ncon(tensors, indices)
+            if L % 2 == 1:
+                return NotImplemented
 
-        tensors = (tmp, tmp)
-        indices = ((-1, 1, 2, -4), (-3, 2, 1, -2))
-        tmp_right = ncon(tensors, indices)
+            self.U1, self.U2 = model.trotter_second_order()
 
-        AAdag = TransferMatrix.new(A, A)
-        T_AA = (AAdag ** (L-2)).tensor
-        tensors = (tmp_left, T_AA, T_AA, tmp_right)
-        indices = ((1, 2, 3, 4), (1, 2, 5, 6), (3, 4, 7, 8), (5, 6, 7, 8))
-        self.costAA = ncon(tensors, indices) / (np.sqrt(A.d) * np.sqrt(A.d))
+            # compute all invarients of the cost function
+            self.purity_A = self._compute_second_trotterized_purity()
+            self._compute_auxillary_second_trotterized()
+
+        else:
+            raise ValueError(f"Trotterization order must be 1 or 2, but got {trotterization_order}")
 
     def cost(self):
-        A, B = self.A, self.B
-        Da, Db = A.d, B.d
 
-        ABdag = FirstOrderTrotterizedTransferMatrix.new(A, B, self.U1, self.U2)
-        BAdag = FirstOrderTrotterizedTransferMatrix.new(B, A, np.conj(self.U2).transpose(2, 3, 0, 1), np.conj(self.U1).transpose(2, 3, 0, 1))
-        BBdag = TransferMatrix.new(self.B, self.B)
-
-        if self.rB is None:
-            self.rB = RightFixedPoint(BBdag)
-
-        res = 0
+        hilbert_schmidt_distance = 0 + 0j
 
         # rho(B)^2 contribution
-        T_BB = (BBdag ** self.L).tensor
-        res += ncon((T_BB, T_BB, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6))) / (np.sqrt(Db) * np.sqrt(Db))
+        hilbert_schmidt_distance += self._compute_trace_product_rhoB_rhoB()
 
         # rho(A(t+dt))^2 contribution
-        res += self.costAA
+        hilbert_schmidt_distance += self.purity_A
+
+        # rho(A(t+dt))rho(B) contribution        
+        hilbert_schmidt_distance -= 2 * self._compute_trace_product_rhoA_rhoB()
+
+        return hilbert_schmidt_distance
+
+    def derivative(self):
+
+        derivative = np.zeros_like(self.B.tensor)
+
+        # rho(B)^2 contribution
+        derivative += 2 * self._compute_derivative_rho_B_rho_B()
 
         # rho(A(t+dt))rho(B) contribution
-        T_AB = (ABdag ** (self.L/2)).tensor
-        T_BA = (BAdag ** (self.L/2)).tensor
-        tensors = (self.left_auxillary, T_AB, T_BA, self.right_auxillary, self.rA.tensor, self.rB.tensor)
-        indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
-        res -= 2 * ncon(tensors, indices) / (np.sqrt(Da) * np.sqrt(Db))
+        derivative -= 2 * self._compute_derivative_rho_A_rho_B()
+
+        return derivative
+
+    def _compute_first_totterized_purity(self) -> np.complex128:
+
+        A, U1, U2, L = self.A, self.U1, self.U2, self.L
+
+        # calculate left dangling tensor
+        tensors = [A.tensor, A.tensor, U1, U1.conj(), A.conj, A.conj]
+        indices = [[1, 2, 3], [3, 4, -1], [2, 4, 5, -2], [6, 7, 5, -3], [1, 6, 8], [8, 7, -4]]
+        tmp = ncon(tensors, indices)
+
+        tensors = [tmp, tmp]
+        indices = [[-1, 1, 2, -4], [-3, 2, 1, -2]]
+        tmp_left = ncon(tensors, indices)
+
+        AAdag = TransferMatrix.new(A, A)
+
+        # different behaviour for an odd and even number of sites
+        if L % 2 == 0:
+            tensors = [A.tensor, A.tensor, U1, U1.conj(), A.conj, A.conj, self.rA.tensor]
+            indices = [[-1, 1, 2], [2, 3, 4], [1, 3, -2, 5], [6, 7, -3, 5], [-4, 6, 8], [8, 7, 9], [4, 9]]
+            tmp = ncon(tensors, indices)
+
+            tensors = [tmp, tmp]
+            indices = [[-1, 1, 2, -4], [-3, 2, 1, -2]]
+            tmp_right = ncon(tensors, indices)
+
+            T_AA = AAdag.__pow__(L-2).tensor
+
+        else:
+            tmp = A.mps_chain(4)
+            tensors = [tmp, U1, U1, U2]
+            indices = [[-1, 1, 2, 3, 4, -6], [1, 2, -2, 5], [3, 4, 6, -5], [5, 6, -3, -4]]
+            tmp = ncon(tensors, indices)
+
+            tensors = [tmp, tmp.conj(), self.rA.tensor]
+            indices = [[-1, -2, -3, 1, 2, 3], [-4, -5, -6, 1, 2, 4], [3, 4]]
+            tmp = ncon(tensors, indices)
+
+            tensors = [tmp, tmp]
+            indices = [[-1, 1, 2, -4, 3, 4], [-3, 3, 4, -2, 1, 2]]
+            tmp_right = ncon(tensors, indices)
+
+            T_AA = AAdag.__pow__(L-3).tensor
+
+        
+        tensors = (tmp_left, T_AA, T_AA, tmp_right)
+        indices = ((1, 2, 3, 4), (1, 2, 5, 6), (3, 4, 7, 8), (5, 6, 7, 8))
+        return ncon(tensors, indices)
+
+    def _compute_left_auxillary_first_trotterized_overlap(self) -> np.complex128:
+
+        A, U1 = self.A, self.U1
+
+        tensors = [A.tensor, A.tensor, self.U1]
+        indices = [[-1, 1, 2], [2, 3, -3], [1, 3, -2, -4]]
+        return ncon(tensors, indices)
+
+    def _compute_right_auxillary_first_trotterized_overlap(self) -> np.complex128:
+
+        L, A, U1, U2 = self.L, self.A, self.U1, self.U2
+
+        # different behaviour for an odd and even number of sites
+        if L % 2 == 0:
+            tensors = [U1.conj(), A.conj, A.conj]
+            indices = [[1, 2, -1, -3], [-2, 1, 3], [3, 2, -4]]
+            return ncon(tensors, indices)
+
+        tmp1 = A.mps_chain(2)
+        tmp2 = A.mps_chain(4)
+
+        tensors = [tmp1, U1]
+        indices = [[-1, 1, 2, -4], [1, 2, -2, -3]]
+        tmp1 = ncon(tensors, indices)
+
+        tensors = [tmp2, U1, U1, U2]
+        indices = [[-1, 1, 2, 3, 4, -6], [1, 2, -2, 5], [3, 4, 6, -5], [5, 6, -3, -4]]
+        tmp2 = ncon(tensors, indices)
+
+        tensors = [tmp1, tmp2.conj(), U2, self.rA.tensor]
+        indices = [[-1, 1, 2, 3], [-6, -5, -4, 4, 2, 5], [-2, 1, -3, 4], [3, 5]]
+        return ncon(tensors, indices)
+
+    def _compute_second_trotterized_purity(self) -> np.complex128:
+
+        A, U1, U2, L, rA = self.A, self.U1, self.U2, self.L, self.rA
+
+        if L <= 4:
+
+            N = L + 4
+
+            mps = A.mps_chain(N)
+
+            # trotterized evolve
+            mps = trotter_step(mps, U1)
+            mps = trotter_step(mps, U2, start=1, stop=2)
+            mps = trotter_step(mps, U2, start=N-3, stop=N-2)
+
+            # compute reduced density matrix over patch size L
+            tensors = [mps, mps.conj(), rA.tensor]
+            indices = [
+                [1, 2, 3] + [-(i+1) for i in range(L)] + [5, 6, 7],
+                [1, 2, 3] + [-(i+1+L) for i in range(L)] + [5, 6, 8],
+                [7, 8]
+            ]
+            rho_A = ncon(tensors, indices)
+
+            # compute trace product
+            tensors = [rho_A, rho_A]
+            indices = [
+                [i for i in range(1, 2*L+1)],
+                [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
+            ]
+            return ncon(tensors, indices)
+        
+        else: 
+
+            # create a base mps to calculate the left and right mixing
+            mps = A.mps_chain(4)
+            mps = trotter_step(mps, U1)
+            mps = trotter_step(mps, U2, start=1)
+
+            tensors = [mps, mps.conj()]
+            indices = [[1, 2, 3, -4, -5, -6], [1, 2, 3, -3, -2, -1]]
+            l = ncon(tensors, indices)
+
+            tensors = [mps, mps.conj(), rA.tensor]
+            indices = [[-1, -2, -3, 1, 2, 3], [-6, -5, -4, 1, 2, 4], [3, 4]]
+            r = ncon(tensors, indices)
+
+            AA = TransferMatrix.new(A, A).__pow__(L-4).tensor
+
+            # compute trace product
+            tensors = [l, l, AA, AA, r, r]
+            indices = [
+                [1, 2, 3, 4, 5, 6], 
+                [7, 5, 4, 3, 2, 8], 
+                [6, 7, 9, 16], 
+                [8, 1, 15, 14], 
+                [9, 10, 11, 12, 13, 14], 
+                [15, 13, 12, 11, 10, 16]
+            ]
+            return ncon(tensors, indices)
+
+    def _compute_auxillary_second_trotterized(self) -> tuple[npt.NDArray[np.complex128]]:
+
+        A, U1, U2, rA = self.A, self.U1, self.U2, self.rA
+
+        mps = A.mps_chain(4)
+        mps = trotter_step(mps, U1)
+        mps = trotter_step(mps, U2, start=1)
+
+        self.left_auxillary = mps
+        self.right_auxillary = ncon([mps.conj(), rA.tensor], [[-1, -2, -3, -4, -5, 1], [-6, 1]])
+
+        return self.left_auxillary, self.right_auxillary
+    
+    def _compute_trace_product_rhoA_rhoB(self) -> np.complex128:
+
+        A, B, U1, U2, rB, L = self.A, self.B, self.U1, self.U2, self.rB, self.L
+
+        if self.trotterization_order == 1:
+
+            ABdag = FirstOrder.new(A, B, U1, U2)
+            BAdag = FirstOrder.new(B, A, U2.conj().transpose(2, 3, 0, 1), U1.conj().transpose(2, 3, 0, 1))
+
+            T_AB = ABdag.__pow__(L//2).tensor
+            T_BA = BAdag.__pow__(L//2).tensor
+
+            if L % 2 == 0:
+                tensors = (self.left_auxillary, T_AB, T_BA, self.right_auxillary, self.rA.tensor, rB.tensor)
+                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
+            else:
+                tensors = [self.left_auxillary, T_AB, T_BA, B.conj, rB.tensor, B.tensor, self.right_auxillary]
+                indices  = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
+
+        elif self.trotterization_order == 2:
+
+            ABdag = SecondOrder.new(A, B, U1, U2)
+            BAdag = SecondOrder.new(B, A, U1.conj().transpose(2, 3, 0, 1), U2.conj().transpose(2, 3, 0, 1))
+
+            T_AB = ABdag.__pow__(L//2).tensor
+            T_BA = BAdag.__pow__(L//2).tensor
+
+            tensors = [self.left_auxillary, T_AB, T_BA, rB.tensor, self.right_auxillary]
+            indices = [
+                [1, 2, 3, 4, 5, 6],
+                [6, 5, 4, 7, 15, 14, 13, 9],
+                [7, 3, 2, 1, 8, 12, 11, 10],
+                [8, 9],
+                [10, 11, 12, 13, 14, 15]
+            ]
+
+        return ncon(tensors, indices)
+
+    def _compute_trace_product_rhoB_rhoB(self) -> np.complex128:
+        BBdag = TransferMatrix.new(self.B, self.B)
+        T_BB = BBdag.__pow__(self.L).tensor
+        return ncon((T_BB, T_BB, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
+
+    def _compute_derivative_rho_A_rho_B(self) -> npt.NDArray[np.complex128]:
+
+        A, B, L, rB, U1, U2 = self.A, self.B, self.L, self.rB, self.U1, self.U2
+        res = np.zeros_like(B.tensor)
+
+        if self.trotterization_order == 1:
+            ABdag = FirstOrder.new(A, B, U1, U2)
+            BAdag = FirstOrder.new(B, A, U2.conj().transpose(2, 3, 0, 1), U1.conj().transpose(2, 3, 0, 1))
+        else:
+            ABdag = SecondOrder.new(A, B, U1, U2)
+            BAdag = SecondOrder.new(B, A, U1.conj().transpose(2, 3, 0, 1), U2.conj().transpose(2, 3, 0, 1))
+
+        T_BA = BAdag.__pow__(L // 2)
+        T_AB = ABdag.__pow__(L // 2)
+        
+        # rho(A(t+dt))rho(B) contribution
+        D = T_AB.derivative()
+        
+        if self.trotterization_order == 1:
+
+            if L % 2 == 0:
+                tensors = (self.left_auxillary, D, T_BA.tensor, self.right_auxillary, self.rA.tensor, self.rB.tensor)
+                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8, -1, -2, -3), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
+            else:
+                tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, self.rB.tensor, B.tensor, self.right_auxillary]
+                indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, -1], [5, 2, 1, 8, 9, 10], [11, -3], [8, 12, 11], [6, 7, -2, 12, 9, 10]]
+                res += ncon(tensors, indices)
+
+                tensors = [self.left_auxillary, D, T_BA.tensor, B.conj, self.rB.tensor, B.tensor, self.right_auxillary]
+                indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8, -1, -2, -3], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
+            res += ncon(tensors, indices)
+
+            # right fixed point
+            if L % 2 == 0:        
+                tensors = (self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary, self.rA.tensor)
+                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, -1), (5, 2, 1, -2, 8, 9), (8, 9, 7, 10), (6, 10))
+            else: 
+                tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, B.conj, B.tensor, self.right_auxillary]
+                indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8], [5, 2, 1, 9, 10, 11], [8, 12, -1], [9, 13, -2], [6, 7, 12, 13, 10, 11]]
+
+        elif self.trotterization_order == 2:
+            
+            tensors = [self.left_auxillary, D, T_BA.tensor, rB.tensor, self.right_auxillary]
+            indices = [
+                [1, 2, 3, 4, 5, 6],
+                [6, 5, 4, 7, 15, 14, 13, 9, -1, -2, -3],
+                [7, 3, 2, 1, 8, 12, 11, 10],
+                [8, 9],
+                [10, 11, 12, 13, 14, 15]
+            ]
+            res += ncon(tensors, indices)
+
+            # right fixed point
+            tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary]
+            indices = [
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                [8, 7, 6, 5, 9, 19, 18, 17, 16, -1],
+                [9, 4, 3, 2, 1, -2, 15, 14, 13, 12],
+                [12, 13, 14, 15, 16, 17, 18, 19]
+            ]
+            indices = [
+                [1, 2, 3, 4, 5, 6],
+                [6, 5, 4, 7, 13, 12, 11, -1],
+                [7, 3, 2, 1, -2, 10, 8, 9],
+                [9, 8, 10, 11, 12, 13]
+            ]
+        
+        v = ncon(tensors, indices)
+        res += rB.derivative(v)
 
         return res
 
-    def derivative(self):
-        A, B = self.A, self.B
-        Da, Db = A.d, B.d
+    def _compute_derivative_rho_B_rho_B(self) -> npt.NDArray[np.complex128]:
+        
+        res = np.zeros_like(self.B.tensor)
 
-        ABdag = FirstOrderTrotterizedTransferMatrix.new(A, B, self.U1, self.U2)
-        BAdag = FirstOrderTrotterizedTransferMatrix.new(B, A, np.conj(self.U2).transpose(2, 3, 0, 1), np.conj(self.U1).transpose(2, 3, 0, 1))
         BBdag = TransferMatrix.new(self.B, self.B)
-
-        if self.rB is None:
-            self.rB = RightFixedPoint(BBdag)
 
         rB = self.rB
 
         T_BB = BBdag ** self.L
-        T_BA = BAdag ** (self.L / 2)
-        T_AB = ABdag ** (self.L / 2)
-
-        res = np.zeros_like(B.tensor)
 
         # rho(B)^2 contribution
         D = T_BB.derivative()
         tensors = (D, T_BB.tensor, rB.tensor, rB.tensor)
-        indices = ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (3, 6), (4, 5))
-        res += 2 * ncon(tensors, indices) / (np.sqrt(Db) * np.sqrt(Db))
+        indices = ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (3, 6), (5, 4))
+        res += ncon(tensors, indices)
 
         # right fixed point
         tensors = (T_BB.tensor, T_BB.tensor, rB.tensor)
         indices = ((1, 2, 3, -1), (2, 1, -2, 4), (3, 4))
         v = ncon(tensors, indices)
-        res += 2 * rB.derivative(v) / (np.sqrt(Db) * np.sqrt(Db))
-
-        # rho(A(t+dt))rho(B) contribution
-        D = T_AB.derivative()
-        tensors = (self.left_auxillary, D, T_BA.tensor, self.right_auxillary, self.rA.tensor, self.rB.tensor)
-        indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8, -1, -2, -3), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
-        res -= 2 * ncon(tensors, indices) / (np.sqrt(Da) * np.sqrt(Db))
-
-        # right fixed point
-        tensors = (self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary, self.rA.tensor)
-        indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, -1), (5, 2, 1, -2, 8, 9), (8, 9, 7, 10), (6, 10))
-        v = ncon(tensors, indices)
-        res -= 2 * rB.derivative(v) / (np.sqrt(Da) * np.sqrt(Db))
+        res += rB.derivative(v)
 
         return res
-
-def transfer_blocks(A: UniformMPS, B: UniformMPS):
-    '''
-        Compute two transfer matrices
-
-        _AB : 1--A--3
-                 |
-              2--B*-4
-
-        A_B : 1--B--3
-                 |
-              2--A*-4
-
-    '''
-    return TransferMatrix.new(A, B), TransferMatrix.new(B, A)
-
-def compute_contraction(ABdag, BAdag, rA, rB, L):
-    return ncon(((ABdag ** L).value , (BAdag ** L).value , rB, rA), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
+        
 
 if __name__ == "__main__":
     
     Da = 5
-    Db = 3
+    Db = 5
     p = 2
 
-    A = UniformMPS.from_random(Da, p)
-    B = UniformMPS.from_random(Db, p)
+    A = UniformMps.new(Da, p)
+    B = UniformMps.new(Db, p)
 
-    from utils.unitary import transverse_ising
-    U = transverse_ising(0.1)
+    from model import TransverseFieldIsing
 
-    assert np.allclose(ncon((U, np.conj(U)), ((-1, -2, 1, 2), (-3, -4, 1, 2))).reshape(4, 4), np.eye(4))
+    tfim = TransverseFieldIsing(0.1, 0.1)
+
+    f = EvolvedHilbertSchmidt(A, B, tfim, L=10)
+    f.cost()
+    f.derivative()
 
     # assert cost 0
     # assert np.allclose(cost(A, A, U, U, 4), 0j)
@@ -269,14 +506,14 @@ if __name__ == "__main__":
     # print(r**(2*L))
     # print(cost(A, B, L))
 
-    D, p = 5, 2
-    SEED = 42
-    np.random.seed(SEED)
-    A = UniformMPS.from_random(D, p)
-    B = UniformMPS.from_random(D, p)
-    f = HilbertSchmidt(A, B, 4)
-    print(f.cost())
-    D = f.derivative()
+    # D, p = 5, 2
+    # SEED = 42
+    # np.random.seed(SEED)
+    # A = UniformMps.new(D, p)
+    # B = UniformMps.new(D, p)
+    # f = HilbertSchmidt(A, B, 4)
+    # print(f.cost())
+    # D = f.derivative()
 
 
-    print(D)
+    # print(D)

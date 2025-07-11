@@ -37,21 +37,21 @@ class AbstractUpdate(ABC):
         self.preconditioning = preconditioning
 
     @abstractmethod
-    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
+    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> tuple[np.ndarray, np.float64]:
         pass
 
 class GradientDescent(AbstractUpdate):
-    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
+    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> tuple[np.ndarray, np.float64]:
         G = self.projector.project(A, D)
         if self.preconditioning:
             G = preconditioning(G, r)
         A_new = A - G * alpha
         d, p, _ = A_new.shape
         _A, _ = polar(A_new.reshape(d*p, d))
-        return _A.reshape(d, p, d)
+        return _A.reshape(d, p, d), np.linalg.norm(G)
     
 class Retraction(AbstractUpdate):
-    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
+    def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> tuple[np.ndarray, np.float64]:
 
         d, p, _ = A.shape
         Y = A.reshape(d*p, d)
@@ -70,7 +70,7 @@ class Retraction(AbstractUpdate):
         # Geodesic formula from paper (2.65) and (3.1)
         Y_new_mat = (Y @ V) @ np.diag(np.cos(s * t)) @ Vh + U @ np.diag(np.sin(s * t)) @ Vh
         
-        return Y_new_mat.reshape(d, p, d)
+        return Y_new_mat.reshape(d, p, d), np.linalg.norm(G)
 
 class TestRetraction(AbstractUpdate):
     def update(self, A: np.ndarray, D: np.ndarray, alpha: float, r: np.ndarray = None) -> np.ndarray:
