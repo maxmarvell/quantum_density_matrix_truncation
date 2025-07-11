@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from ncon import ncon
-from uniform_mps import UniformMps
 from typing import Self
+
+from qdmt.uniform_mps import UniformMps
 
 class AbstractTransferMatrix(ABC):
 

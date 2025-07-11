@@ -2,16 +2,16 @@ from abc import ABC, abstractmethod
 from ncon import ncon
 import numpy as np
 import numpy.typing as npt
-from uniform_mps import UniformMps
-from transfer_matrix import (
+from qdmt.uniform_mps import UniformMps
+from qdmt.transfer_matrix import (
     FirstOrderTrotterizedTransferMatrix as FirstOrder,
     SecondOrderTrotterizedTransferMatrix as SecondOrder,
     TransferMatrix
 )
-from fixed_point import RightFixedPoint
 from typing import Self
-from model import AbstractModel
-from utils.mps import trotter_step
+from qdmt.model import AbstractModel
+from qdmt.utils.mps import trotter_step
+from qdmt.fixed_point import RightFixedPoint
 
 class AbstractCostFunction(ABC):
 
@@ -129,7 +129,8 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         elif trotterization_order == 2:
 
             if L % 2 == 1:
-                return NotImplemented
+                raise NotImplementedError("Second-order Trotterization is not implemented for odd L.")
+
 
             self.U1, self.U2 = model.trotter_second_order()
 
@@ -471,7 +472,7 @@ if __name__ == "__main__":
     A = UniformMps.new(Da, p)
     B = UniformMps.new(Db, p)
 
-    from model import TransverseFieldIsing
+    from qdmt.model import TransverseFieldIsing
 
     tfim = TransverseFieldIsing(0.1, 0.1)
 

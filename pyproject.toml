@@ -5,6 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "quantum_density_matrix_truncation"
 version = "0.1.0"
+dependencies = [
+    "numpy",
+    "scipy",
+    "ncon",
+]
+
+[project.scripts]
+run-schmidt-echo = "qdmt.lo_schmidt:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

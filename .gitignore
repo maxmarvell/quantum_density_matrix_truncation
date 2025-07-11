@@ -1,11 +1,10 @@
 venv/
-**/__pycache__/
-data/
+__pycache__/
 .gitignore
 .pytest_cache/
-src/test.py
-src/test_cost.py
 app/
 scripts/
+build/
 .vscode/
 .DS_store
+*.egg-info/

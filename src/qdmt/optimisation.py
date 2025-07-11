@@ -1,6 +1,6 @@
-from utils.geometry import *
-from cost import AbstractCostFunction
-from uniform_mps import UniformMps
+from qdmt.utils.geometry import *
+from qdmt.cost import AbstractCostFunction
+from qdmt.uniform_mps import UniformMps
 
 class OpimisationProblem():
     
@@ -43,8 +43,8 @@ if __name__ == "__main__":
 
     A = UniformMps.new(d, p)
     
-    from model import TransverseFieldIsing
-    from cost import EvolvedHilbertSchmidt
+    from qdmt.model import TransverseFieldIsing
+    from qdmt.cost import EvolvedHilbertSchmidt
     tfim = TransverseFieldIsing(0.1, 0.1)
 
     proj = GrassmanProjector()

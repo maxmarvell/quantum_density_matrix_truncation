@@ -1,8 +1,10 @@
 from ncon import ncon
 from scipy.sparse.linalg import eigs, LinearOperator, gmres
 from functools import partial
-from transfer_matrix import *
 from typing import Self
+import numpy as np
+
+from qdmt.transfer_matrix import TransferMatrix
 
 def EtildeLeft(E: TransferMatrix, r, v):
 
@@ -80,7 +82,7 @@ class LeftFixedPoint():
         
 if __name__ == "__main__":
 
-    from uniform_mps import UniformMps
+    from qdmt.uniform_mps import UniformMps
 
     A = UniformMps.new(5, 2)
     E = TransferMatrix.new(A, A)
