@@ -9,10 +9,12 @@ dependencies = [
     "numpy",
     "scipy",
     "ncon",
+    "matplotlib",
 ]
 
 [project.scripts]
-run-schmidt-echo = "qdmt.lo_schmidt:main"
+run-schmidt-echo = "qdmt.cli:run_simulation"
+plot-schmidt-echo = "qdmt.cli:plot_results"
 
 [tool.setuptools.packages.find]
 where = ["src"]
