@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from ncon import ncon
 from typing import Self
+from scipy.sparse.linalg import eigs
 
 from qdmt.uniform_mps import UniformMps
 
@@ -103,6 +104,11 @@ class TransferMatrix(AbstractTransferMatrix):
     def to_matrix(self):
         Da, Db = self.d1, self.d2
         return self.tensor.reshape(Da*Db, Da*Db)
+    
+    def fidelity(self) -> np.complex128:
+        M = self.to_matrix()
+        r = eigs(M, k=1, which='LM', return_eigenvectors=False)
+        return r[0]
 
 class FirstOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
 
