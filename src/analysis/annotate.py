@@ -29,6 +29,8 @@ def compute_correlation_length(A) -> np.float64:
     r = eigs(M, k=2, which='LM', return_eigenvectors=False)
     return -1.0/np.log(np.abs(r[1]/r[0]))
 
+# def compute_trace
+
 
 def parse():
     parser = argparse.ArgumentParser(description="Annotate time evolved data.")

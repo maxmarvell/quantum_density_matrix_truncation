@@ -188,6 +188,11 @@ def run_simulation():
 
             else:
                 print("Invalid choice. Please try again.")
+    else:
+         # load the ground state
+        filename = f"data/ground_state/gstate_ising2_D{args.D}_g{args.g1}.npy"
+        with open(filename, 'rb') as f:
+            A = UniformMps(np.load(f))
 
     times, state, cost, norm = evolve(A, args.L, model, args.delta_t, args.max_time, args.max_iters, args.tol, args.alpha, start_t=start_time)
     max_iters = np.full_like(times, args.max_iters)

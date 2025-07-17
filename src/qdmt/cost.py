@@ -368,7 +368,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
     def _compute_derivative_rho_A_rho_B(self) -> npt.NDArray[np.complex128]:
 
-        A, B, L, rB, U1, U2 = self.A, self.B, self.L, self.rB, self.U1, self.U2
+        A, B, L, U1, U2 = self.A, self.B, self.L, self.U1, self.U2
         res = np.zeros_like(B.tensor)
 
         if self.trotterization_order == 1:
@@ -383,58 +383,10 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         
         # rho(A(t+dt))rho(B) contribution
         D = T_AB.derivative()
-        
-        if self.trotterization_order == 1:
 
-            if L % 2 == 0:
-                tensors = (self.left_auxillary, D, T_BA.tensor, self.right_auxillary, self.rA.tensor, self.rB.tensor)
-                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8, -1, -2, -3), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
-            else:
-                tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, self.rB.tensor, B.tensor, self.right_auxillary]
-                indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, -1], [5, 2, 1, 8, 9, 10], [11, -3], [8, 12, 11], [6, 7, -2, 12, 9, 10]]
-                res += ncon(tensors, indices)
-
-                tensors = [self.left_auxillary, D, T_BA.tensor, B.conj, self.rB.tensor, B.tensor, self.right_auxillary]
-                indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8, -1, -2, -3], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
-            res += ncon(tensors, indices)
-
-            # right fixed point
-            if L % 2 == 0:        
-                tensors = (self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary, self.rA.tensor)
-                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, -1), (5, 2, 1, -2, 8, 9), (8, 9, 7, 10), (6, 10))
-            else: 
-                tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, B.conj, B.tensor, self.right_auxillary]
-                indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8], [5, 2, 1, 9, 10, 11], [8, 12, -1], [9, 13, -2], [6, 7, 12, 13, 10, 11]]
-
-        elif self.trotterization_order == 2:
-            
-            tensors = [self.left_auxillary, D, T_BA.tensor, rB.tensor, self.right_auxillary]
-            indices = [
-                [1, 2, 3, 4, 5, 6],
-                [6, 5, 4, 7, 15, 14, 13, 9, -1, -2, -3],
-                [7, 3, 2, 1, 8, 12, 11, 10],
-                [8, 9],
-                [10, 11, 12, 13, 14, 15]
-            ]
-            res += ncon(tensors, indices)
-
-            # right fixed point
-            tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary]
-            indices = [
-                [1, 2, 3, 4, 5, 6, 7, 8],
-                [8, 7, 6, 5, 9, 19, 18, 17, 16, -1],
-                [9, 4, 3, 2, 1, -2, 15, 14, 13, 12],
-                [12, 13, 14, 15, 16, 17, 18, 19]
-            ]
-            indices = [
-                [1, 2, 3, 4, 5, 6],
-                [6, 5, 4, 7, 13, 12, 11, -1],
-                [7, 3, 2, 1, -2, 10, 8, 9],
-                [9, 8, 10, 11, 12, 13]
-            ]
-        
-        v = ncon(tensors, indices)
-        res += rB.derivative(v)
+        # compute central contribution
+        res += self._contract_rhoA_rhoB_central_derivative(D, T_AB, T_BA)
+        res += self._contract_rhoA_rhoB_fixed_point_derivative(T_AB, T_BA)
 
         return res
 
@@ -462,6 +414,62 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
         return res
         
+    def _contract_rhoA_rhoB_central_derivative(self, D, T_AB, T_BA):
+
+        L = self.L
+
+        if self.trotterization_order == 1:
+
+            if L % 2 == 0:
+                tensors = (self.left_auxillary, D, T_BA.tensor, self.right_auxillary, self.rA.tensor, self.rB.tensor)
+                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8, -1, -2, -3), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
+                return ncon(tensors, indices)
+
+            tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, self.rB.tensor, B.tensor, self.right_auxillary]
+            indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, -1], [5, 2, 1, 8, 9, 10], [11, -3], [8, 12, 11], [6, 7, -2, 12, 9, 10]]
+            tmp = ncon(tensors, indices)
+
+            tensors = [self.left_auxillary, D, T_BA.tensor, self.B.conj, self.rB.tensor, B.tensor, self.right_auxillary]
+            indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8, -1, -2, -3], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
+            return ncon(tensors, indices) + tmp
+
+        elif self.trotterization_order == 2:
+            
+            tensors = [self.left_auxillary, D, T_BA.tensor, self.rB.tensor, self.right_auxillary]
+            indices = [
+                [1, 2, 3, 4, 5, 6],
+                [6, 5, 4, 7, 15, 14, 13, 9, -1, -2, -3],
+                [7, 3, 2, 1, 8, 12, 11, 10],
+                [8, 9],
+                [10, 11, 12, 13, 14, 15]
+            ]
+            order = [8, 1, 2, 3, 10, 11, 12, 6, 7, 9, 15, 4, 5, 13, 14]
+            return ncon(tensors, indices, order=order, )
+
+    def _contract_rhoA_rhoB_fixed_point_derivative(self, T_AB, T_BA):
+
+        L = self.L
+
+        if self.trotterization_order == 1:
+            if L % 2 == 0:        
+                tensors = (self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary, self.rA.tensor)
+                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, -1), (5, 2, 1, -2, 8, 9), (8, 9, 7, 10), (6, 10))
+            else: 
+                B = self.B
+                tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, B.conj, B.tensor, self.right_auxillary]
+                indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8], [5, 2, 1, 9, 10, 11], [8, 12, -1], [9, 13, -2], [6, 7, 12, 13, 10, 11]]
+
+        elif self.trotterization_order == 2:
+            tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary]
+            indices = [
+                [1, 2, 3, 4, 5, 6],
+                [6, 5, 4, 7, 13, 12, 11, -1],
+                [7, 3, 2, 1, -2, 10, 8, 9],
+                [9, 8, 10, 11, 12, 13]
+            ]
+        
+        v = ncon(tensors, indices)
+        return self.rB.derivative(v)
 
 if __name__ == "__main__":
     

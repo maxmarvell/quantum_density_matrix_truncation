@@ -243,7 +243,8 @@ class SecondOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
 
         tensors = [A, A, U1, U2, U1]
         indices = [[-1, 1, 2], [2, 3, -5], [1, 3, 4, -6], [-2, 4, 5, -7], [-3, 5, -4, -8]]
-        res = ncon(tensors, indices)
+        order = [2, 1, 3, 4, 5]
+        res = ncon(tensors, indices, order=order)
 
         tensors = [np.eye(d), B.conj(), res]
         indices = [[-4, -9], [-11, 1, -8], [-1, -2, -3, -10, -5, -6, -7, 1]]
@@ -275,13 +276,13 @@ class SecondOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
                 [-1, -2, -3, -4, 1, 2, 3, 4, -9, -10, -11], 
                 [1, 2, 3, 4, -5, -6, -7, -8]
             ]
-            D1 = ncon(tensors, indices)
+            D1 = ncon(tensors, indices, order=[1, 4, 2, 3])
             
             tensors = [E1.tensor, E2.derivative()]
             indices = [
                 [-1, -2, -3, -4, 1, 2, 3, 4], 
                 [1, 2, 3, 4, -5, -6, -7, -8, -9, -10, -11]]
-            D2 = ncon(tensors, indices)
+            D2 = ncon(tensors, indices, order=[1, 4, 2, 3])
 
             self._derivative = D1 + D2
             return self._derivative
@@ -290,4 +291,12 @@ class SecondOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
         
 
 if __name__ == "__main__":
-    pass
+
+    from qdmt.model import TransverseFieldIsing
+    TFIM = TransverseFieldIsing(.2, .1)
+    U1, U2 = TFIM.trotter_second_order()
+    A = UniformMps.new(2, 2)
+    E = SecondOrderTrotterizedTransferMatrix(A, A, U1, U2)
+
+    T = E.__pow__(10)
+    T.derivative()
