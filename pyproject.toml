@@ -17,6 +17,9 @@ evolve-state = "qdmt.evolve:run_simulation"
 plot-schmidt-echo = "qdmt.cli:plot_results"
 annotate-transverse-field = "analysis.annotate:main"
 
+[project.optional-dependencies]
+dev = ["pytest", "pytest-benchmark"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
