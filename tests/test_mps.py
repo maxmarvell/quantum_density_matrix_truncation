@@ -1,7 +1,7 @@
 import pytest
-from src.uniform_mps import UniformMps
-from src.utils.mps import trotter_step
-from src.model import TransverseFieldIsing
+from qdmt.uniform_mps import UniformMps
+from qdmt.utils.mps import trotter_step
+from qdmt.model import TransverseFieldIsing
 import numpy as np
 from ncon import ncon
 

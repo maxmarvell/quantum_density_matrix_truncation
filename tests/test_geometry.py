@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from src.utils.geometry import *
-from src.uniform_mps import UniformMps
-from src.cost import HilbertSchmidt
+from qdmt.utils.geometry import *
+from qdmt.uniform_mps import UniformMps
+from qdmt.cost import HilbertSchmidt
 from ncon import ncon
 
 class DummyProjector(IdentityProjector):

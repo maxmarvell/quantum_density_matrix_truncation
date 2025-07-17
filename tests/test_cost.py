@@ -1,8 +1,8 @@
 
 from tests.helpers.cost import EvolvedHilbertSchmidt as Naive
-from src.cost import EvolvedHilbertSchmidt as Efficient
-from src.model import TransverseFieldIsing
-from src.uniform_mps import UniformMps
+from qdmt.cost import EvolvedHilbertSchmidt as Efficient
+from qdmt.model import TransverseFieldIsing
+from qdmt.uniform_mps import UniformMps
 import numpy as np
 import pytest
 
