@@ -9,12 +9,15 @@ from qdmt.transfer_matrix import (
 FIXED_L = 10
 FIXED_D = 5
 
+@pytest.fixture(params=[2, 4, 8, 16])
+def L(request):
+    return request.param
+
 @pytest.fixture(params=[2, 4, 6, 8])
-def f(request):
+def f(request, L):
     A = UniformMps.new(request.param, 2)
     tfim = TransverseFieldIsing(0.2, 0.1)
-    return EvolvedHilbertSchmidt(A, A, tfim, 10, trotterization_order=2)
-
+    return EvolvedHilbertSchmidt(A, A, tfim, L, trotterization_order=2)
 
 def test_compute_derivative_rho_A_rho_B(benchmark, f):
     benchmark(f._compute_derivative_rho_A_rho_B)
