@@ -14,7 +14,7 @@ dependencies = [
 
 [project.scripts]
 evolve-state = "qdmt.evolve:run_simulation"
-plot-schmidt-echo = "qdmt.cli:plot_results"
+plot-schmidt-echo = "analysis.lo_schmidt_echo:main"
 annotate-transverse-field = "analysis.annotate:main"
 
 [project.optional-dependencies]

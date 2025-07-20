@@ -83,7 +83,7 @@ class HilbertSchmidt(AbstractCostFunction):
         BBdag = TransferMatrix.new(self.B, self.B)
 
         L = self.L
-        res = np.zeros_like(self.B.tensor, np.complex128)
+        res = np.zeros_like(self.B.tensor, dtype=np.complex128)
 
         # rho(B)^2 contribution
         T_BB = BBdag.__pow__(L)
@@ -158,7 +158,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
     def derivative(self):
 
-        derivative = np.zeros_like(self.B.tensor)
+        derivative = np.zeros_like(self.B.tensor, dtype=np.complex128)
 
         # rho(B)^2 contribution
         derivative += 2 * self._compute_derivative_rho_B_rho_B()
@@ -369,7 +369,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
     def _compute_derivative_rho_A_rho_B(self) -> npt.NDArray[np.complex128]:
 
         A, B, L, U1, U2 = self.A, self.B, self.L, self.U1, self.U2
-        res = np.zeros_like(B.tensor)
+        res = np.zeros_like(B.tensor, dtype=np.complex128)
 
         if self.trotterization_order == 1:
             ABdag = FirstOrder.new(A, B, U1, U2)
@@ -392,7 +392,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
     def _compute_derivative_rho_B_rho_B(self) -> npt.NDArray[np.complex128]:
         
-        res = np.zeros_like(self.B.tensor)
+        res = np.zeros_like(self.B.tensor, dtype=np.complex128)
 
         BBdag = TransferMatrix.new(self.B, self.B)
 

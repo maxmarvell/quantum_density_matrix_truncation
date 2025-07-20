@@ -127,10 +127,11 @@ def run_simulation():
             
             if choice == 'w':
                 print("The file will be overwritten!")
+                savefile = filepath
                 break
             
             elif choice == 'n':
-                filepath = input("Enter the new file path: ")
+                savefile = input("Enter the new file path: ")
                 break
             
             else:
@@ -206,7 +207,7 @@ def run_simulation():
         max_iters = np.concatenate((prev_max_iters, max_iters))
         tol = np.concatenate((prev_tol, tol))
 
-    np.savez_compressed(filepath,
+    np.savez_compressed(savefile,
                         time=times,
                         state=state,
                         gradient_norm=norm,
@@ -215,4 +216,26 @@ def run_simulation():
                         tol=tol)
 
 if __name__ == "__main__":
-    run_simulation()
+    # run_simulation()
+
+    from model import TransverseFieldIsing
+    from utils.geometry import GrassmanProjector, Retraction
+
+    d = 6
+    A0 = UniformMps(np.load(f'data/ground_state/gstate_ising2_D{d}_g1.5.npy'))
+    delta_t = 0.1
+    tfim = TransverseFieldIsing(0.2, delta_t)
+    L = 8
+    max_t = 1.0
+    tol = 1e-10
+    alpha = 0.01
+
+    P = GrassmanProjector()
+    g = Retraction(P, True)
+
+    _, states, _, _ = evolve(A0, L, tfim, delta_t, max_t, 10000, tol, update=g)
+    A1 = UniformMps(states[-1])
+
+    from ncon import ncon
+
+    assert np.allclose(ncon([A1.tensor, A1.conj], [[1, 2, -2], [1, 2, -1]]), np.eye(d))

@@ -64,6 +64,12 @@ class UniformMps():
         E = ncon((self.tensor, other.conj), ((-1, 1, -3), (-2, 1, -4)))
         r = eigs(E.reshape(d1*d2, d1*d2), k=1, which='LM', return_eigenvectors=False)
         return np.abs(r[0])
+    
+    def normalization(self):
+        d = self.d
+        E = ncon((self.tensor, self.conj), ((-1, 1, -3), (-2, 1, -4)))
+        r = eigs(E.reshape(d*d, d*d), k=1, which='LM', return_eigenvectors=False)
+        return np.abs(r[0])
             
 if __name__ == "__main__":
     pass
