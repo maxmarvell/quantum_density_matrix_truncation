@@ -19,6 +19,7 @@ def parse():
     parser.add_argument(
         'filepath',
         type=str,
+        nargs='+',
         help='Relative file path to time evolved data.'
     )
     return parser.parse_args()
@@ -26,22 +27,34 @@ def parse():
 def main():
     args = parse()
 
-    try:
-        data = np.load(args.filepath)
-    except OSError:
-        print(f"Error: unable to read file at location {args.filepath}.")
+    num_files = len(args.filepath)
+    _, axs = plt.subplots(num_files, 1, figsize=(10, 4 * num_files), sharex=True)
 
-    transverse_mag = np.empty_like(data['time'])
+    if num_files == 1:
+        axs = [axs]
 
-    for i in range(len(data['time'])):
-        A = UniformMps(data['state'][i])
-        transverse_mag[i] = compute_transverse_magnetization(A)
+    for i, filepath in enumerate(args.filepath):
+        try:
+            data = np.load(filepath)
+        except OSError:
+            print(f"Error: unable to read file at location {filepath}. Skipping this file.")
+            continue
 
-    _, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(data['time'], transverse_mag, marker='o', markersize=2)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel(r'$\langle\sigma^z\rangle$')
+        transverse_mag = np.empty_like(data['time'])
 
+        for j in range(len(data['time'])):
+            A = UniformMps(data['state'][j])
+            transverse_mag[j] = compute_transverse_magnetization(A)
+
+        axs[i].plot(data['time'], transverse_mag, marker='o', markersize=2, label=f'File: {filepath}')
+        axs[i].set_ylabel(r'$\langle\sigma^z\rangle$')
+        axs[i].legend()
+        axs[i].grid(True) # Add grid for better readability
+
+    # Set common x-label for the bottom-most subplot
+    axs[-1].set_xlabel('Time (s)')
+
+    plt.tight_layout()
     plt.show()
     
 if __name__ == "__main__":

@@ -1,15 +1,17 @@
 import pytest
 from qdmt.uniform_mps import UniformMps
-from qdmt.transfer_matrix import TransferMatrix
+from qdmt.cost import EvolvedHilbertSchmidt
+from qdmt.model import TransverseFieldIsing
 
-FIXED_D = 5
-FIXED_N = 10
+@pytest.fixture(params=[2, 4, 8, 16])
+def L(request):
+    return request.param
 
-@pytest.mark.parametrize("L", [2, 10, 50, 100])
-def test_transfer_matrix_pow_scaling_with_n(benchmark, n):
-    """
-    Benchmarks __pow__ scaling with the exponent `n` for a fixed dimension `d`.
-    """
-    A=UniformMps.new(d=FIXED_D, p=2)
-    B=UniformMps.new(d=FIXED_D, p=2)
-    benchmark(transfer_matrix.__pow__, n)
+@pytest.fixture(params=[2, 4, 6, 8])
+def f(request, L):
+    A = UniformMps.new(request.param, 2)
+    tfim = TransverseFieldIsing(0.2, 0.1)
+    return EvolvedHilbertSchmidt(A, A, tfim, L, trotterization_order=2)
+
+def test_cost(benchmark, f):
+    benchmark(f.cost)

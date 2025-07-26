@@ -83,5 +83,25 @@ class TransverseFieldIsing(AbstractModel):
     def _compute_U_quarter_dt(self) -> None:
         H = self.H.reshape(4, 4)
         self.U_quarter_dt = expm(-.5j*self.delta_t*H).reshape(2, 2, 2, 2)
-        
+
+
+class HeisenbergXXZ(AbstractModel):
+
+    ZZ = np.kron(Pauli.Sz, Pauli.Sz) 
+    XX = np.kron(Pauli.Sx, Pauli.Sx) 
+    YY = np.kron(Pauli.Sy, Pauli.Sy) 
+    ZI = np.kron(Pauli.Sz, Pauli.I)
+
+    def __init__(self, h:float, Delta: float, delta_t: float):
+        super().__init__(delta_t)
+        self.h = h
+        self.Delta = Delta
+        self.H = (self.Delta*self.ZZ+self.XX+self.YY+self.h*self.ZI).reshape(2, 2, 2, 2)
+
+    def _compute_U_half_dt(self) -> None:
+        H = self.H.reshape(4, 4)
+        self.U_half_dt = expm(-1j*self.delta_t*H).reshape(2, 2, 2, 2)
     
+    def _compute_U_quarter_dt(self) -> None:
+        H = self.H.reshape(4, 4)
+        self.U_quarter_dt = expm(-.5j*self.delta_t*H).reshape(2, 2, 2, 2)

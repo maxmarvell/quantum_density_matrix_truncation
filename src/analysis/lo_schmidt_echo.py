@@ -33,6 +33,7 @@ def parse():
     parser.add_argument(
         'filepath',
         type=str,
+        nargs='+',
         help='Relative file path to time evolved data.'
     )
     return parser.parse_args()
@@ -40,41 +41,70 @@ def parse():
 def main():
     args = parse()
 
-    try:
-        data = np.load(args.filepath)
-    except OSError:
-        print(f"Error: unable to read file at location {args.filepath}.")
+    args = parse()
 
-    A0 = UniformMps(data['state'][0])
-    lo_schmidt_echo = np.empty_like(data['time'])
+    num_files = len(args.filepath)
 
-    for i in range(len(data['time'])):
-        A = UniformMps(data['state'][i])
-        lo_schmidt_echo[i] = compute_lo_schmidt(A, A0)
 
-    print(data['gradient_norm'])
-    print(data['cost'])
-    print(data['max_iters'])
-    print(data['tol'])
+    if num_files == 1:
+        try:
+            data = np.load(args.filepath[0])
+        except OSError:
+            print(f"Error: unable to read file at location {args.filepath[0]}.")
 
-    exact_times = np.linspace(0.0, 10.0, 400)
-    exact = [loschmidt_paper(t, 1.5, 0.2) for t in exact_times]
+        A0 = UniformMps(data['state'][0])
+        lo_schmidt_echo = np.empty_like(data['time'])
 
-    _, ax = plt.subplots(3, 1, figsize=(10, 6), sharex=True)
-    ax[0].plot(exact_times, exact, label='Exact')
-    ax[0].plot(data['time'], lo_schmidt_echo, '+', label='Approximate')
-    ax[2].set_xlabel('Time (s)')
-    ax[0].set_ylabel(r'$|\langle\psi|\psi\rangle|^2$')
+        exact_times = np.linspace(0.0, data['time'][-1], 100)
+        exact = [loschmidt_paper(t, 1.5, 0.2) for t in exact_times]
 
-    ax[1].plot(data['time'], data['cost'])
-    ax[1].set_yscale('log')
+        for i in range(len(data['time'])):
+            A = UniformMps(data['state'][i])
+            lo_schmidt_echo[i] = compute_lo_schmidt(A, A0)
+            
+        _, axs = plt.subplots(3, 1, figsize=(10, 6), sharex=True)
+        axs[0].plot(exact_times, exact, label='Exact')
+        axs[0].plot(data['time'], lo_schmidt_echo, '+', label='Approximate')
+        axs[2].set_xlabel('Time (s)')
+        axs[0].set_ylabel(r'$|\langle\psi|\psi\rangle|^2$')
 
-    ax[2].plot(data['time'], data['gradient_norm'], label='Gradient Norm')
-    ax[2].plot(data['time'], data['tol'], '--', label='Tolerance')
-    ax[2].set_yscale('log')
+        axs[1].plot(data['time'], data['cost'])
+        axs[1].set_yscale('log')
 
+        axs[2].plot(data['time'], data['gradient_norm'], label='Gradient Norm')
+        axs[2].plot(data['time'], data['tol'], '--', label='Tolerance')
+        axs[2].set_yscale('log')
+
+    else: 
+        _, axs = plt.subplots(num_files, 1, figsize=(10, 4 * num_files), sharex=True)   
+        for i, filepath in enumerate(args.filepath):
+            try:
+                data = np.load(filepath)
+            except OSError:
+                print(f"Error: unable to read file at location {filepath}. Skipping this file.")
+                continue
+
+            A0 = UniformMps(data['state'][0])
+            loschmidt = np.empty_like(data['time'])
+
+            for j in range(len(data['time'])):
+                A = UniformMps(data['state'][j])
+                loschmidt[j] = compute_lo_schmidt(A, A0)
+
+            exact_times = np.linspace(0.0, data['time'][-1], 100)
+            exact = [loschmidt_paper(t, 1.5, 0.2) for t in exact_times]
+
+            axs[i].plot(exact_times, exact, label='Exact')
+            axs[i].plot(data['time'], loschmidt, '+', label=f'File: {filepath}')
+            axs[i].set_ylabel(r'$\langle\sigma^z\rangle$')
+            axs[i].legend()
+            axs[i].grid(True) # Add grid for better readability
+
+    # Set common x-label for the bottom-most subplot
+    axs[-1].set_xlabel('Time (s)')
+
+    plt.tight_layout()
     plt.show()
-    
 
 if __name__ == "__main__":
     main()

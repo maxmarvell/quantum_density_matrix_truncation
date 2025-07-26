@@ -23,9 +23,17 @@ def test_new(benchmark, A):
 def E(A):
     return SecondOrder.new(A, A, U1, U2)
 
+@pytest.fixture()
+def E_naive(A):
+    return NaiveSecondOrder.new(A, A, U1, U2)
+
 @pytest.mark.parametrize("L", [2, 4, 8, 16])
 def test_transfer_matrix_pow(benchmark, E, L):
     benchmark(E.__pow__, L)
+
+@pytest.mark.parametrize("L", [2, 4, 8, 16])
+def test_transfer_matrix_pow_naive(benchmark, E_naive, L):
+    benchmark(E_naive.__pow__, L)
 
 @pytest.mark.parametrize("L", [2, 4, 8, 16])
 def test_transfer_matrix_derivative(benchmark, E, L):
