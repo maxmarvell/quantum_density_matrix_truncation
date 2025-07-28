@@ -2,8 +2,9 @@ from qdmt.uniform_mps import UniformMps
 from qdmt.model import AbstractModel
 from qdmt.utils.geometry import AbstractUpdate
 from qdmt.cost import EvolvedHilbertSchmidt
-from qdmt.optimisation import OpimisationProblem
-from qdmt.utils.geometry import GrassmanProjector, GradientDescent, AbstractUpdate
+from qdmt.optimisation import GradientDescent
+from qdmt.utils.geometry import GrassmanProjector, AbstractUpdate
+from qdmt.manifold import Grassmann
 
 import numpy as np
 from numpy.lib.npyio import NpzFile
@@ -23,12 +24,6 @@ def evolve(A0: UniformMps,
            update: AbstractUpdate | None = None, 
            trotterization_order: int = 2,
            rtol: float = 1e-3):
-    
-    if update is None:    
-        proj = GrassmanProjector()
-        g = GradientDescent(proj, True)
-    else:
-        g = update
 
     
     A = UniformMps(A0.tensor)
@@ -38,11 +33,13 @@ def evolve(A0: UniformMps,
     norm = np.empty_like(times)
     state = np.empty((len(times), *A.tensor.shape), dtype=np.complex128)
 
+    M = Grassmann()
+
     for i, t in enumerate(times):
         f = EvolvedHilbertSchmidt(A, A, model, L, trotterization_order)
-        X = OpimisationProblem(f, g, alpha=alpha)
-        A, cost[i], norm[i] = X.optimize(max_iter, tol, True, rtol)
-        state[i] = A.tensor
+        gd = GradientDescent(f, M)
+
+        state[i], cost[i], norm[i] = gd.optimize(max_iter, tol, True)
 
         print(f"\nEvolved the state to t={t}\n\n")
 
