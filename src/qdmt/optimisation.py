@@ -122,7 +122,7 @@ class GradientDescent(AbstractOptimizer):
         
         else:
             print("\nLinesearch failed to converge - defaulting to step size of 0.1")
-            W_prime = self._retract(W, X, 0.1)
+            W_prime, _ = self._retract(W, X, 0.1)
             return UniformMps(W_prime), C, np.linalg.norm(G)
 
 if __name__ == "__main__":
