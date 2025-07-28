@@ -12,6 +12,7 @@ from typing import Self
 from qdmt.model import AbstractModel
 from qdmt.utils.mps import trotter_step
 from qdmt.fixed_point import RightFixedPoint
+import copy
 
 class AbstractCostFunction(ABC):
 
@@ -41,6 +42,10 @@ class AbstractCostFunction(ABC):
     @abstractmethod
     def derivative(self) -> np.ndarray:
         pass
+
+    def copy(self) -> 'AbstractCostFunction':
+        new_f = copy.copy(self)
+        return new_f
 
 class HilbertSchmidt(AbstractCostFunction):
 
@@ -154,7 +159,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         # rho(A(t+dt))rho(B) contribution        
         hilbert_schmidt_distance -= 2 * self._compute_trace_product_rhoA_rhoB()
 
-        return hilbert_schmidt_distance
+        return np.abs(hilbert_schmidt_distance)
 
     def derivative(self):
 
@@ -470,7 +475,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         
         v = ncon(tensors, indices)
         return self.rB.derivative(v)
-
+    
 if __name__ == "__main__":
     
     Da = 5
