@@ -1,9 +1,7 @@
 from qdmt.uniform_mps import UniformMps
-from qdmt.model import AbstractModel
-from qdmt.utils.geometry import AbstractUpdate
+from qdmt.model import AbstractModel, TransverseFieldIsing
 from qdmt.cost import EvolvedHilbertSchmidt
 from qdmt.optimisation import GradientDescent
-from qdmt.utils.geometry import GrassmanProjector, AbstractUpdate
 from qdmt.manifold import Grassmann
 
 import numpy as np
@@ -19,11 +17,8 @@ def evolve(A0: UniformMps,
            max_t: float, 
            max_iter: int, 
            tol: float,
-           alpha: float = 0.1, 
            start_t: float = 0.0,
-           update: AbstractUpdate | None = None, 
-           trotterization_order: int = 2,
-           rtol: float = 1e-3):
+           trotterization_order: int = 2):
 
     
     A = UniformMps(A0.tensor)
@@ -39,7 +34,8 @@ def evolve(A0: UniformMps,
         f = EvolvedHilbertSchmidt(A, A, model, L, trotterization_order)
         gd = GradientDescent(f, M)
 
-        state[i], cost[i], norm[i] = gd.optimize(max_iter, tol, True)
+        A, cost[i], norm[i] = gd.optimize(max_iter, tol, True)
+        state[i] = A.tensor
 
         print(f"\nEvolved the state to t={t}\n\n")
 
@@ -94,8 +90,8 @@ def parse(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--tol',
         type=float,
-        default=1e-8,
-        help='Optimization tolerance at each time step (default: 1e-8)'
+        default=1e-6,
+        help='Optimization tolerance at each time step (default: 1e-6)'
     )
     parser.add_argument(
         '--delta-t',
@@ -192,8 +188,6 @@ def load_state(filepath: str):
 
 def run_simulation():
 
-    from qdmt.model import TransverseFieldIsing
-
     parser = argparse.ArgumentParser(description="Evolve the state from an initial state under a NN transverse-field Hamiltonian.")
     args = parse(parser)
 
@@ -207,7 +201,7 @@ def run_simulation():
     while not check_write_permission(savefile):
         savefile = input("Choose another location to save the file: ")
 
-    times, state, cost, norm = evolve(A, args.L, model, args.delta_t, args.max_time, args.max_iters, args.tol, args.alpha, start_t=start_time)
+    times, state, cost, norm = evolve(A, args.L, model, args.delta_t, args.max_time, args.max_iters, args.tol, start_t=start_time)
     max_iters = np.full_like(times, args.max_iters)
     tol = np.full_like(times, args.tol)
 
@@ -228,35 +222,9 @@ def run_simulation():
                         tol=tol)
 
 if __name__ == "__main__":
-    # run_simulation()
+    
+    filename = 'data/ground_state/gstate_ising2_D6_g1.5.npy'
+    A, _, _ = load_state(filename)
+    model = TransverseFieldIsing(0.2, 0.25)
+    evolve(A, 4, model, 0.25, 1, 1000, 1e-5)
 
-    from model import TransverseFieldIsing, HeisenbergXXZ
-    from utils.geometry import GrassmanProjector, Retraction, GradientDescent
-
-    d = 4
-    A0 = UniformMps(np.load(f'data/ground_state/gstate_ising2_D{d}_g1.5.npy'))
-    delta_t = 0.2
-    tfim = HeisenbergXXZ(0.2, 1.5, delta_t)
-    L = 4
-    max_t = 20
-    max_i = 10000
-    tol = 1e-10
-    alpha = 0.1
-
-    P = GrassmanProjector()
-    g = GradientDescent(P, True)
-
-    times, state, cost, norm = evolve(A0, L, tfim, delta_t, max_t, max_i, tol, update=g, rtol=1e-4)
-    max_iters_arr = np.full_like(times, max_i)
-    tol_arr = np.full_like(times, tol)
-    np.savez_compressed('data/07-25/XXZ_bond_dimension_4-L_4',
-                        time=times,
-                        state=state,
-                        gradient_norm=norm,
-                        cost=cost,
-                        max_iters=max_iters_arr,
-                        tol=tol_arr)
-
-    from ncon import ncon
-    A1 = UniformMps(state[-1])
-    assert np.allclose(ncon([A1.tensor, A1.conj], [[1, 2, -2], [1, 2, -1]]), np.eye(d))

@@ -1,4 +1,8 @@
-from qdmt.utils.geometry import *
+from abc import ABC, abstractmethod
+import numpy as np
+from ncon import ncon
+
+from qdmt.manifold import AbstractManifold
 from qdmt.cost import AbstractCostFunction
 from qdmt.uniform_mps import UniformMps
 from qdmt.linesearch import linesearch
@@ -18,9 +22,6 @@ def preconditioning(G: np.ndarray, r: np.ndarray) -> np.ndarray:
     delta = np.linalg.norm(G)**2
     Rinv = np.linalg.inv(r + np.eye(d)*delta)
     return G @ Rinv
-
-from abc import ABC, abstractmethod
-from qdmt.manifold import AbstractManifold
 
 class AbstractOptimizer(ABC):
 
@@ -81,7 +82,7 @@ class GradientDescent(AbstractOptimizer):
         super().__init__(f, M)
         self.alpha0 = alpha0
         self.tmp_f = f.copy()
-        self.c1 = c2
+        self.c1 = c1
         self.c2 = c2
 
     def _retract(self, W: np.ndarray, X: np.ndarray, alpha: float) -> tuple[np.ndarray, np.ndarray]:
@@ -120,8 +121,9 @@ class GradientDescent(AbstractOptimizer):
             return UniformMps(W_prime), C_prime, np.linalg.norm(G)
         
         else:
+            print("\nLinesearch failed to converge - defaulting to step size of 0.1")
             W_prime = self._retract(W, X, 0.1)
-            return UniformMps(W), C, np.linalg.norm(G)
+            return UniformMps(W_prime), C, np.linalg.norm(G)
 
 if __name__ == "__main__":
 

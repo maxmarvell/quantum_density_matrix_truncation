@@ -87,7 +87,7 @@ class UniformMps():
     
     def check_left_orthonormal(self):
         I = ncon((self.tensor, self.conj), ((2, 1, -2), (2, 1, -1)))
-        assert np.allclose(I, np.eye(self.d))
+        return np.allclose(I, np.eye(self.d))
 
     def left_orthorganlize(self) -> None:
         A, _ = polar(self.matrix)
