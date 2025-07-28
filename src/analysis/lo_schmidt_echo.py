@@ -55,7 +55,7 @@ def main():
         A0 = UniformMps(data['state'][0])
         lo_schmidt_echo = np.empty_like(data['time'])
 
-        exact_times = np.linspace(0.0, data['time'][-1], 100)
+        exact_times = np.linspace(0.0, data['time'][-1], int(20*data['time'][-1]))
         exact = [loschmidt_paper(t, 1.5, 0.2) for t in exact_times]
 
         for i in range(len(data['time'])):
@@ -91,7 +91,7 @@ def main():
                 A = UniformMps(data['state'][j])
                 loschmidt[j] = compute_lo_schmidt(A, A0)
 
-            exact_times = np.linspace(0.0, data['time'][-1], 100)
+            exact_times = np.linspace(0.0, data['time'][-1], int(20*data['time'][-1]))
             exact = [loschmidt_paper(t, 1.5, 0.2) for t in exact_times]
 
             axs[i].plot(exact_times, exact, label='Exact')
