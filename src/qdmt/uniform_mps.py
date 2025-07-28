@@ -2,14 +2,24 @@ from ncon import ncon
 import numpy as np
 from scipy.linalg import polar
 from scipy.sparse.linalg import eigs
-from scipy.stats import unitary_group
 from typing import Self
 
 class UniformMps():
 
     def __init__(self, A: np.ndarray):
-        self.d, self.p, _ = A.shape
-        self.tensor = A
+
+        if A.ndim == 2:
+            self.d = A.shape[1]
+
+            if A.shape[0] % A.shape[1] != 0:
+                raise ValueError("Error: To define a uniform matrix product state from an isometry isometry must have shape like `(d*D, D)`")
+            
+            self.p = A.shape[0] // A.shape[1]
+            self.tensor = A.reshape(self.d, self.p, self.d)
+
+        elif A.ndim == 3:
+            self.d, self.p, _ = A.shape
+            self.tensor = A
 
     @classmethod
     def new(cls, d: int, p: int, left_canonical: bool = True):
@@ -46,6 +56,10 @@ class UniformMps():
     def matrix(self):
         return self.tensor.reshape(self.d * self.p, self.d)
     
+    @property
+    def isometry(self):
+        return self.tensor.reshape(self.d * self.p, self.d)
+    
     @property 
     def conj(self):
         return self.tensor.conj()
@@ -70,6 +84,14 @@ class UniformMps():
         E = ncon((self.tensor, self.conj), ((-1, 1, -3), (-2, 1, -4)))
         r = eigs(E.reshape(d*d, d*d), k=1, which='LM', return_eigenvectors=False)
         return np.abs(r[0])
+    
+    def check_left_orthonormal(self):
+        I = ncon((self.tensor, self.conj), ((2, 1, -2), (2, 1, -1)))
+        assert np.allclose(I, np.eye(self.d))
+
+    def left_orthorganlize(self) -> None:
+        A, _ = polar(self.matrix)
+        self.tensor = A.reshape(self.d, self.p, self.d)
             
 if __name__ == "__main__":
     pass
