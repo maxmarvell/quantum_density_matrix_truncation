@@ -1,7 +1,7 @@
 from qdmt.uniform_mps import UniformMps
 from qdmt.model import AbstractModel, TransverseFieldIsing
 from qdmt.cost import EvolvedHilbertSchmidt
-from qdmt.optimisation import GradientDescent
+from qdmt.optimisation import ConjugateGradient
 from qdmt.manifold import Grassmann
 
 import numpy as np
@@ -32,9 +32,9 @@ def evolve(A0: UniformMps,
 
     for i, t in enumerate(times):
         f = EvolvedHilbertSchmidt(A, A, model, L, trotterization_order)
-        gd = GradientDescent(f, M)
+        gd = ConjugateGradient(f, M, A, max_iter, tol=tol, verbose=True)
 
-        A, cost[i], norm[i] = gd.optimize(max_iter, tol, True)
+        A, cost[i], norm[i], _ = gd.optimize()
         state[i] = A.tensor
 
         print(f"\nEvolved the state to t={t}\n\n")
@@ -202,24 +202,18 @@ def run_simulation():
         savefile = input("Choose another location to save the file: ")
 
     times, state, cost, norm = evolve(A, args.L, model, args.delta_t, args.max_time, args.max_iters, args.tol, start_t=start_time)
-    max_iters = np.full_like(times, args.max_iters)
-    tol = np.full_like(times, args.tol)
 
     if previous_data:
         times = np.concatenate((previous_data['time'], times))
         state = np.concatenate((previous_data['state'], state))
         cost = np.concatenate((previous_data['cost'], cost))
         norm = np.concatenate((previous_data['gradient_norm'], norm))
-        max_iters = np.concatenate((previous_data['max_iters'], max_iters))
-        tol = np.concatenate((previous_data['tol'], tol))
 
     np.savez_compressed(savefile,
                         time=times,
                         state=state,
                         gradient_norm=norm,
-                        cost=cost,
-                        max_iters=max_iters,
-                        tol=tol)
+                        cost=cost)
 
 if __name__ == "__main__":
     

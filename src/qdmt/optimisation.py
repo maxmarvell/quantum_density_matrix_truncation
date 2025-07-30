@@ -2,10 +2,11 @@ from abc import ABC, abstractmethod
 import numpy as np
 from ncon import ncon
 
-from qdmt.manifold import AbstractManifold
+from qdmt.manifold import AbstractManifold, euclidian_metric as inner
 from qdmt.cost import AbstractCostFunction
 from qdmt.uniform_mps import UniformMps
 from qdmt.linesearch import linesearch
+from qdmt.fixed_point import RightFixedPoint
 
 def preconditioning(G: np.ndarray, r: np.ndarray) -> np.ndarray:
     """
@@ -29,74 +30,95 @@ class AbstractOptimizer(ABC):
         self.f = f
         self.M = M
 
+    def fg(self, B: UniformMps):
+        n, p = B.matrix.shape
+        C = self.f.cost(B)
+        D = self.f.derivative(B).reshape(n, p)
+        return C, self.M.project(B.matrix, D)
+
     @abstractmethod
-    def update(self, precondition: bool = True) -> tuple[UniformMps, float, float]:
+    def optimize(self) -> tuple[UniformMps, np.float64, np.float64]:
         pass
-
-    def optimize(self, max_iters: int, tol: float, verbose: bool = False, rtol: float = 1e-3) -> tuple[UniformMps, np.complex128]:
-        print(f"Initial cost: {abs(self.f.cost())}")
-
-        norm = tol
-        cost = []
-        gradient_norm = []
-
-        for i in range(max_iters):
-
-            new_B, tmp_cost, norm = self.update()
-
-            # guarantee left canonical is preserved
-            if not new_B.check_left_orthonormal():
-                print("Warning: The uniform matrix product state is no longer left canonical, orthoganlizing...")
-                new_B.left_orthorganlize()
-
-            self.f.B = new_B
-
-            cost.append(tmp_cost)
-            gradient_norm.append(norm)
-
-            if verbose and i % 100 == 0:
-                print(f"Iteration {i}:")
-                print(f"\tCost - {abs(tmp_cost)}")
-                print(f"\tGradient Norm - {norm}")
-
-            if i > 1:
-                if abs(cost[i-1] - cost[i-2]) / abs(cost[i-2]) < rtol:
-                    print("\nConverged, cost function not sufficiently decreasing!")
-                    print(f"Iteration {i}:")
-                    print(f"\tCost - {abs(tmp_cost)}")
-                    print(f"\tGradient Norm - {norm}")
-                    break
-
-            if norm < tol:
-                print("\nConverged!")
-                print(f"Iteration {i}:")
-                print(f"\tCost - {abs(tmp_cost)}")
-                print(f"\tGradient Norm - {norm}")
-                break
-
-        return self.f.B, np.abs(self.f.cost()), np.abs(norm)
 
 class GradientDescent(AbstractOptimizer):
 
-    def __init__(self, f: AbstractCostFunction, M: AbstractManifold, alpha0: float = 1.0, c1: float = 1e-4, c2: float = 0.9):
+    alpha0 = 1.0
+    c1 = 1.0
+    c2 = 1e-1
+
+    def __init__(self, f: AbstractCostFunction, M: AbstractManifold, B0: UniformMps, max_iter: int, tol: float = 1e-8, precondition: bool = True, verbose: bool = True):
         super().__init__(f, M)
-        self.alpha0 = alpha0
         self.tmp_f = f.copy()
-        self.c1 = c1
-        self.c2 = c2
+        self.B0 = B0
+        self.rB0 = RightFixedPoint.from_mps(B0)
+        self.precondtion = precondition
+        self.max_iter = max_iter
+        self.tol = tol
+        self.verbose = verbose
 
-    def _retract(self, W: np.ndarray, X: np.ndarray, alpha: float) -> tuple[np.ndarray, np.ndarray]:
+    def optimize(self):
+        
+        W = self.B0.matrix
+        C, G = self.fg(self.B0)
+        cost_history = [C]
 
-        U, s, Vh = np.linalg.svd(X, full_matrices=False)
-        V = Vh.conj().T
+        norm_grad = np.sqrt(inner(G, G))
+        grad_history = [norm_grad]
 
-        # Geodesic formula from paper (2.65) and (3.1)
-        W_prime = (W @ V) @ np.diag(np.cos(s * alpha)) @ Vh + U @ np.diag(np.sin(s * alpha)) @ Vh
+        if self.precondtion:
+            G_tilde = preconditioning(G, self.rB0.tensor)
+        else:
+            G_tilde = G
 
-        Q_X = X @ W.conj().T - W @ X.conj().T
-        X_prime = Q_X @ W_prime
+        alpha = 1 / (np.sqrt(inner(G_tilde, G_tilde)))
 
-        return W_prime, X_prime
+        if self.verbose:
+            print(f"GD: initializing with f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}")
+
+        # --- Main optimization loop ---
+        iter = 0
+        while True:
+            if self.precondtion:
+                u_mps = UniformMps(W)
+                rB = RightFixedPoint.from_mps(u_mps)
+                G_tilde = preconditioning(G, rB.tensor)
+            else:
+                G_tilde = G
+
+            # initial search direction is negative gradient
+            X = -G_tilde
+
+            alpha, W, C, G, success = linesearch(self.tmp_f, self.M, W, X, C, G, alpha0=alpha)
+
+            B = UniformMps(W)
+            
+            if not B.check_left_orthonormal():
+                print("Warning: Not left orthonormal left orthonormalizing!")
+                B.left_orthorganlize()
+                W = B.matrix
+
+            if not success:
+                W, _ = self.M.retract(W, X, alpha)
+                C, D = self.f.fg(B)
+                G = self.M.project(W, D)
+
+            iter += 1
+
+            cost_history.append(C)
+            norm_grad = np.sqrt(inner(G, G))
+            grad_history.append(norm_grad)
+
+            if norm_grad <= self.tol or iter >= self.max_iter:
+                break
+
+            if self.verbose == True:
+                print(f"GD: iter {iter:4d}: f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}, α = {alpha:.2e}")
+
+            alpha *= 2   
+
+        history = [cost_history, grad_history]
+        return W, C, G, history
+
     
     def update(self, precondition: bool = True) -> tuple[UniformMps, float, float]:
 
@@ -110,36 +132,164 @@ class GradientDescent(AbstractOptimizer):
         if precondition:
             G = preconditioning(G, self.f.rB.tensor)
 
+        if self.alpha0 == None:
+            self.alpha0 = 1 / np.linalg.norm(G) ** 2
+
         # Descent direction is steepest gradient
         X = -G
 
         # --- Try a linesearch if fails then fallback to alpha = 0.1 ---
-        alpha0, W_prime, C_prime, _, converged = linesearch(self.tmp_f, self.M, W, X, C, G, self._retract, alpha0=self.alpha0)
+        alpha0, W_prime, C_prime, _, converged = linesearch(self.tmp_f, self.M, W, X, C, G, self._retract, alpha0=2*self.alpha0)
 
         if converged:
             self.alpha0 = alpha0
+            print(f"Converged alpha: {alpha0}")
             return UniformMps(W_prime), C_prime, np.linalg.norm(G)
         
         else:
             print("\nLinesearch failed to converge - defaulting to step size of 0.1")
             W_prime, _ = self._retract(W, X, 0.1)
             return UniformMps(W_prime), C, np.linalg.norm(G)
+        
+class ConjugateGradient(AbstractOptimizer):
+
+    THETA = 1.0
+    ETA = 0.4
+
+    def __init__(self, f: AbstractCostFunction, M: AbstractManifold, B0: UniformMps, max_iter: int, tol: float = 1e-8, restart: int = np.inf,  precondition: bool = True, verbose: bool = False,):
+        super().__init__(f, M)
+        self.B0 = B0
+        self.rB0 = RightFixedPoint.from_mps(B0)
+        self.precondtion = precondition
+        self.restart = restart
+        self.max_iter = max_iter
+        self.tol = tol
+        self.verbose = verbose
+        self.tmp_f = f.copy()
+    
+    def _Hager_Zhang(self, g, gprev, Pg, Pgprev, dprev):
+        dd = inner(dprev, dprev)
+        dg = inner(dprev, g)
+        dgprev = inner(dprev, gprev)
+        gPg = inner(g, Pg)
+        gprevPgprev = inner(gprev, Pgprev)
+        gPgprev = inner(g, Pgprev)
+        gprevPg = inner(gprev, Pg) # should probably be the same as gprevPg
+
+        dy = dg - dgprev
+        gPy = gPg - gPgprev
+        yPy = gPg + gprevPgprev - gPgprev - gprevPg
+
+        beta = (gPy - self.THETA*(yPy/dy)*dg)/dy
+
+        eta = self.ETA*dgprev/dd
+        if beta < self.ETA:
+            pass
+            # print("Warning: Resorting to default eta")
+        return max(beta, eta)
+
+    def optimize(self):
+
+        W = self.B0.matrix
+        C, G = self.fg(self.B0)
+        cost_history = [C]
+
+        norm_grad = np.sqrt(inner(G, G))
+        grad_history = [norm_grad]
+
+        if self.precondtion:
+            G_tilde = preconditioning(G, self.rB0.tensor)
+        else:
+            G_tilde = G
+
+        alpha = 1 / (np.sqrt(inner(G_tilde, G_tilde)))
+
+        if self.verbose:
+            print(f"CG: initializing with f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}")
+
+        # --- Main optimization loop ---
+        iter = 0
+        while True:
+            if self.precondtion:
+                u_mps = UniformMps(W)
+                rB = RightFixedPoint.from_mps(u_mps)
+                G_tilde = preconditioning(G, rB.tensor)
+            else:
+                G_tilde = G
+
+            # initial search direction is negative gradient
+            X = -G_tilde
+
+            # use momentum if not at restart
+            if iter % self.restart == 0:
+                beta = 0
+            else:
+                beta = self._Hager_Zhang(G, G_prev, G_tilde, G_tilde_prev, X_prev)
+                X = X + X_prev * beta
+
+            # store current quantities as previous quantities
+            W_prev = W
+            X_prev = X
+            G_prev = G
+            G_tilde_prev = G_tilde
+
+            alpha, W, C, G, success = linesearch(self.tmp_f, self.M, W, X, C, G, alpha0=alpha)
+
+            B = UniformMps(W)
+            
+            if not B.check_left_orthonormal():
+                print("Warning: Not left orthonormal left orthonormalizing!")
+                B.left_orthorganlize()
+                W = B.matrix
+
+            if not success:
+                alpha = min(alpha, 0.1)
+                W, _ = self.M.retract(W, X, alpha)
+                C, D = self.f.fg(B)
+                G = self.M.project(W, D)
+
+            iter += 1
+
+            cost_history.append(C)
+            norm_grad = np.sqrt(inner(G, G))
+            grad_history.append(norm_grad)
+
+            if norm_grad <= self.tol or iter >= self.max_iter:
+                break
+
+            if self.verbose == True and iter % 10 == 0:
+                print(f"CG: iter {iter:4d}: f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}, α = {alpha:.2e}, β = {beta:.2e}")
+
+            alpha *= 2
+
+
+            G_prev = self.M.transport(G_prev, W_prev, X_prev, alpha, W)
+            if self.precondtion:
+                G_tilde_prev = self.M.transport(G_tilde_prev, W_prev, X_prev, alpha, W)
+            else:
+                G_tilde_prev = G_prev
+            X_prev = self.M.transport(X_prev, W_prev, X_prev, alpha, W)  
+
+        print(f"\nCG: Converged! iter {iter:4d}: f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}, α = {alpha:.2e}, β = {beta:.2e}")
+
+        history = [cost_history, grad_history]
+        return UniformMps(W), C, norm_grad, history
 
 if __name__ == "__main__":
-
-    d = 4
-    p = 2
-
-    A = UniformMps.new(d, p)
     
     from qdmt.model import TransverseFieldIsing
     from qdmt.cost import EvolvedHilbertSchmidt
     from qdmt.manifold import Grassmann
+    from qdmt.evolve import load_state
 
-    tfim = TransverseFieldIsing(0.1, 0.1)
+    filename = 'data/ground_state/gstate_ising2_D6_g1.5.npy'
+    A, _, _ = load_state(filename)
+    tfim = TransverseFieldIsing(0.2, 0.1)
     M = Grassmann()
     f = EvolvedHilbertSchmidt(A, A, tfim, 4, trotterization_order=2)
-    opt = GradientDescent(f, M)
-    opt.optimize(1000, 1e-8, verbose=True)
-    print(np.allclose(ncon((opt.f.B.conj, opt.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(d, dtype=np.complex128), rtol=1e-12))
+    opt = ConjugateGradient(f, M, A, max_iter=1000, verbose=True)
+    opt.optimize()
+
+    D, d, _ = A.tensor.shape
+    print(np.allclose(ncon((opt.f.B.conj, opt.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(D, dtype=np.complex128), rtol=1e-12))
 

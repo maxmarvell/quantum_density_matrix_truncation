@@ -19,11 +19,10 @@ def linesearch(
     X: np.ndarray,
     C: float,
     G: np.ndarray,
-    retraction: Callable[[np.ndarray, np.ndarray, float], np.ndarray],
     alpha0: float = 1.0,
-    c1: float = 1e-3,
+    c1: float = 1e-1,
     c2: float = 0.9,
-    epsilon: float = 1e-8,
+    epsilon: float = 1e-6,
     rho: float = 5.0,
     gamma: float = 0.66,
     max_iter: int = 20
@@ -57,7 +56,7 @@ def linesearch(
         """Computes function value and derivative at a new point."""
 
         # update tensor and slope
-        W_prime, X_prime = retraction(W, X, alpha)
+        W_prime, X_prime = M.retract(W, X, alpha)
 
         # compute cost and gradient at new point
         f.B = UniformMps(W_prime)
@@ -130,4 +129,4 @@ def linesearch(
             alpha = (a.alpha + b.alpha) / 2.0
 
     print("Warning: Line search did not converge within max_iter.")
-    return None, None, None, None, False
+    return alpha0, W, C, G, False
