@@ -34,18 +34,24 @@ class AbstractCostFunction(ABC):
         BBdag = TransferMatrix.new(value, value)
         self.rB = RightFixedPoint(BBdag)
 
-    
     @abstractmethod
-    def cost(self) -> np.complex128:
+    def cost(self, B: UniformMps | None = None) -> np.float64:
         pass
 
     @abstractmethod
-    def derivative(self) -> np.ndarray:
+    def derivative(self, B: UniformMps | None = None) -> np.ndarray:
         pass
 
     def copy(self) -> 'AbstractCostFunction':
         new_f = copy.copy(self)
         return new_f
+    
+    def fg(self, B: UniformMps):
+        n, p = B.matrix.shape
+        C = self.cost(B)
+        D = self.derivative(B)
+        return np.abs(C), D.reshape(n, p)
+
 
 class HilbertSchmidt(AbstractCostFunction):
 
@@ -58,7 +64,7 @@ class HilbertSchmidt(AbstractCostFunction):
         self.costAA  = ncon((T_AA, T_AA, self.rA.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
 
 
-    def cost(self:Self) -> np.float64:
+    def cost(self:Self, B: UniformMps | None = None) -> np.float64:
 
         ABdag = TransferMatrix.new(self.A, self.B)
         BAdag = TransferMatrix.new(self.B, self.A)
@@ -146,30 +152,42 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         else:
             raise ValueError(f"Trotterization order must be 1 or 2, but got {trotterization_order}")
 
-    def cost(self):
+    def cost(self, B: UniformMps | None = None, rB: RightFixedPoint | None = None):
+
+        if B == None:
+            B = self.B
+
+        if rB == None:
+            rB = self.rB
 
         hilbert_schmidt_distance = 0 + 0j
 
         # rho(B)^2 contribution
-        hilbert_schmidt_distance += self._compute_trace_product_rhoB_rhoB()
+        hilbert_schmidt_distance += self._compute_trace_product_rhoB_rhoB(B, rB)
 
         # rho(A(t+dt))^2 contribution
         hilbert_schmidt_distance += self.purity_A
 
         # rho(A(t+dt))rho(B) contribution        
-        hilbert_schmidt_distance -= 2 * self._compute_trace_product_rhoA_rhoB()
+        hilbert_schmidt_distance -= 2 * self._compute_trace_product_rhoA_rhoB(B, rB)
 
         return np.abs(hilbert_schmidt_distance)
 
-    def derivative(self):
+    def derivative(self, B: UniformMps | None = None, rB: RightFixedPoint | None = None):
+
+        if B == None:
+            B = self.B
+
+        if rB == None:
+            rB = self.rB
 
         derivative = np.zeros_like(self.B.tensor, dtype=np.complex128)
 
         # rho(B)^2 contribution
-        derivative += 2 * self._compute_derivative_rho_B_rho_B()
+        derivative += 2 * self._compute_derivative_rho_B_rho_B(B, rB)
 
         # rho(A(t+dt))rho(B) contribution
-        derivative -= 2 * self._compute_derivative_rho_A_rho_B()
+        derivative -= 2 * self._compute_derivative_rho_A_rho_B(B, rB)
 
         return derivative
 
@@ -225,7 +243,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
         A, U1 = self.A, self.U1
 
-        tensors = [A.tensor, A.tensor, self.U1]
+        tensors = [A.tensor, A.tensor, U1]
         indices = [[-1, 1, 2], [2, 3, -3], [1, 3, -2, -4]]
         return ncon(tensors, indices)
 
@@ -328,9 +346,9 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
         return self.left_auxillary, self.right_auxillary
     
-    def _compute_trace_product_rhoA_rhoB(self) -> np.complex128:
+    def _compute_trace_product_rhoA_rhoB(self, B: UniformMps, rB: RightFixedPoint) -> np.complex128:
 
-        A, B, U1, U2, rB, L = self.A, self.B, self.U1, self.U2, self.rB, self.L
+        A, U1, U2, L = self.A, self.U1, self.U2, self.L
 
         if self.trotterization_order == 1:
 
@@ -366,14 +384,14 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
         return ncon(tensors, indices)
 
-    def _compute_trace_product_rhoB_rhoB(self) -> np.complex128:
-        BBdag = TransferMatrix.new(self.B, self.B)
+    def _compute_trace_product_rhoB_rhoB(self, B: UniformMps, rB: RightFixedPoint) -> np.complex128:
+        BBdag = TransferMatrix.new(B, B)
         T_BB = BBdag.__pow__(self.L).tensor
-        return ncon((T_BB, T_BB, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
+        return ncon((T_BB, T_BB, rB.tensor, rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
 
-    def _compute_derivative_rho_A_rho_B(self) -> npt.NDArray[np.complex128]:
+    def _compute_derivative_rho_A_rho_B(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
 
-        A, B, L, U1, U2 = self.A, self.B, self.L, self.U1, self.U2
+        A, L, U1, U2 = self.A, self.L, self.U1, self.U2
         res = np.zeros_like(B.tensor, dtype=np.complex128)
 
         if self.trotterization_order == 1:
@@ -390,12 +408,12 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         D = T_AB.derivative()
 
         # compute central contribution
-        res += self._contract_rhoA_rhoB_central_derivative(D, T_AB, T_BA)
-        res += self._contract_rhoA_rhoB_fixed_point_derivative(T_AB, T_BA)
+        res += self._contract_rhoA_rhoB_central_derivative(D, T_AB, T_BA, B, rB)
+        res += self._contract_rhoA_rhoB_fixed_point_derivative(T_AB, T_BA, B, rB)
 
         return res
 
-    def _compute_derivative_rho_B_rho_B(self) -> npt.NDArray[np.complex128]:
+    def _compute_derivative_rho_B_rho_B(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
         
         res = np.zeros_like(self.B.tensor, dtype=np.complex128)
 
@@ -419,28 +437,28 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
         return res
         
-    def _contract_rhoA_rhoB_central_derivative(self, D, T_AB, T_BA):
+    def _contract_rhoA_rhoB_central_derivative(self, D, T_AB, T_BA, B: UniformMps, rB: RightFixedPoint):
 
         L = self.L
 
         if self.trotterization_order == 1:
 
             if L % 2 == 0:
-                tensors = (self.left_auxillary, D, T_BA.tensor, self.right_auxillary, self.rA.tensor, self.rB.tensor)
+                tensors = (self.left_auxillary, D, T_BA.tensor, self.right_auxillary, self.rA.tensor, rB.tensor)
                 indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8, -1, -2, -3), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
                 return ncon(tensors, indices)
 
-            tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, self.rB.tensor, B.tensor, self.right_auxillary]
+            tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, rB.tensor, B.tensor, self.right_auxillary]
             indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, -1], [5, 2, 1, 8, 9, 10], [11, -3], [8, 12, 11], [6, 7, -2, 12, 9, 10]]
             tmp = ncon(tensors, indices)
 
-            tensors = [self.left_auxillary, D, T_BA.tensor, self.B.conj, self.rB.tensor, B.tensor, self.right_auxillary]
+            tensors = [self.left_auxillary, D, T_BA.tensor, self.B.conj, rB.tensor, B.tensor, self.right_auxillary]
             indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8, -1, -2, -3], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
             return ncon(tensors, indices) + tmp
 
         elif self.trotterization_order == 2:
             
-            tensors = [self.left_auxillary, D, T_BA.tensor, self.rB.tensor, self.right_auxillary]
+            tensors = [self.left_auxillary, D, T_BA.tensor, rB.tensor, self.right_auxillary]
             indices = [
                 [1, 2, 3, 4, 5, 6],
                 [6, 5, 4, 7, 15, 14, 13, 9, -1, -2, -3],
@@ -451,7 +469,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
             order = [8, 1, 2, 3, 10, 11, 12, 6, 7, 9, 15, 4, 5, 13, 14]
             return ncon(tensors, indices, order=order, )
 
-    def _contract_rhoA_rhoB_fixed_point_derivative(self, T_AB, T_BA):
+    def _contract_rhoA_rhoB_fixed_point_derivative(self, T_AB, T_BA, B: UniformMps, rB: RightFixedPoint):
 
         L = self.L
 
@@ -459,8 +477,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
             if L % 2 == 0:        
                 tensors = (self.left_auxillary, T_AB.tensor, T_BA.tensor, self.right_auxillary, self.rA.tensor)
                 indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, -1), (5, 2, 1, -2, 8, 9), (8, 9, 7, 10), (6, 10))
-            else: 
-                B = self.B
+            else:
                 tensors = [self.left_auxillary, T_AB.tensor, T_BA.tensor, B.conj, B.tensor, self.right_auxillary]
                 indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8], [5, 2, 1, 9, 10, 11], [8, 12, -1], [9, 13, -2], [6, 7, 12, 13, 10, 11]]
 
@@ -474,7 +491,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
             ]
         
         v = ncon(tensors, indices)
-        return self.rB.derivative(v)
+        return rB.derivative(v)
     
 if __name__ == "__main__":
     
