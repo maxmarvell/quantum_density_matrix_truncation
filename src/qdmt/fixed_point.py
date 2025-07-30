@@ -5,6 +5,7 @@ from typing import Self
 import numpy as np
 
 from qdmt.transfer_matrix import TransferMatrix
+from qdmt.uniform_mps import UniformMps
 
 def EtildeLeft(E: TransferMatrix, r, v):
 
@@ -35,6 +36,11 @@ class RightFixedPoint():
 
         ## assumes left canonical
         self.tensor = r / np.trace(r)
+
+    @classmethod
+    def from_mps(cls, u_mps: UniformMps):
+        E = TransferMatrix.new(u_mps, u_mps)
+        return cls(E)
 
     def derivative(self, v) -> np.ndarray:
         _, nb = self.tensor.shape
@@ -81,12 +87,4 @@ class LeftFixedPoint():
 
         
 if __name__ == "__main__":
-
-    from qdmt.uniform_mps import UniformMps
-
-    A = UniformMps.new(5, 2)
-    E = TransferMatrix.new(A, A)
-
-    lA = LeftFixedPoint(E)
-
-    print(lA.tensor / lA.tensor[0, 0])
+    pass
