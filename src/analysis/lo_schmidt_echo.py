@@ -66,13 +66,14 @@ def main():
         axs[0].plot(exact_times, exact, label='Exact')
         axs[0].plot(data['time'], lo_schmidt_echo, '+', label='Approximate')
         axs[2].set_xlabel('Time (s)')
-        axs[0].set_ylabel(r'$|\langle\psi|\psi\rangle|^2$')
+        axs[0].set_ylabel(r'$-\log\Bigl\{|\langle\psi|\psi\rangle|^2\Bigr\}$')
 
         axs[1].plot(data['time'], data['cost'])
+        axs[1].set_ylabel(r'$C(A)$')
         axs[1].set_yscale('log')
 
         axs[2].plot(data['time'], data['gradient_norm'], label='Gradient Norm')
-        axs[2].plot(data['time'], data['tol'], '--', label='Tolerance')
+        axs[2].set_ylabel(r'$|G|$')
         axs[2].set_yscale('log')
 
     else: 
@@ -96,7 +97,7 @@ def main():
 
             axs[i].plot(exact_times, exact, label='Exact')
             axs[i].plot(data['time'], loschmidt, '+', label=f'File: {filepath}')
-            axs[i].set_ylabel(r'$\langle\sigma^z\rangle$')
+            axs[i].set_ylabel(r'$-\log\bigl\{|\langle\psi|\psi\rangle|^2\bigr\}$')
             axs[i].legend()
             axs[i].grid(True) # Add grid for better readability
 
