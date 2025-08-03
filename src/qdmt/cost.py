@@ -154,7 +154,9 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         else:
             raise ValueError(f"Trotterization order must be 1 or 2, but got {trotterization_order}")
 
-        self.rhoA = self._compute_rhoA()
+        D, d, _ = A.tensor.shape
+        if (D**8*d**7*np.log(L) > d**(2*L)*L*D**2*d):
+            self.rhoA = self._compute_rhoA()
 
     def cost(self, B: UniformMps, rB: RightFixedPoint):
 
@@ -410,7 +412,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         d = B.p
         L = self.L
 
-        if (DA**3*DB**5*d**7*np.log(L) <= d**(2*L)*L*DB**2):
+        if (DA**3*DB**5*d**7*np.log(L) <= d**(2*L)*L*DB**2*d):
 
             A, L, U1, U2 = self.A, self.L, self.U1, self.U2
             res = np.zeros_like(B.tensor, dtype=np.complex128)
