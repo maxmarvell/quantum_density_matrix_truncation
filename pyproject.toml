@@ -16,7 +16,7 @@ dependencies = [
 evolve-state = "qdmt.evolve:run_simulation"
 plot-schmidt-echo = "analysis.lo_schmidt_echo:main"
 plot-transverse-magnetisation = "analysis.transverse_magnetisation:main"
-annotate-transverse-field = "analysis.annotate:main"
+plot-benchmark-scaling = "analysis.benchmark_scaling:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-benchmark"]
