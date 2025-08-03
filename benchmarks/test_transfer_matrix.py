@@ -58,3 +58,14 @@ def test_transfer_matrix_derivative_scaling_with_d(benchmark, d):
 
     E = transfer_matrix.__pow__(FIXED_N)
     benchmark(E.derivative)
+
+@pytest.mark.parametrize("d", [2, 5, 10, 15])
+def test_transfer_matrix_derivative(benchmark, d):
+    """
+    Benchmarks __pow__ scaling with the exponent `n` for a fixed dimension `d`.
+    """
+    E = TransferMatrix.new(
+        A=UniformMps.new(d=d, p=2),
+        B=UniformMps.new(d=d, p=2)
+    )
+    benchmark(E.derivative)

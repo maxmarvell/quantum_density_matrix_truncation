@@ -39,6 +39,9 @@ def test_transfer_matrix_pow_naive(benchmark, E_naive, L):
 def test_transfer_matrix_derivative(benchmark, E, L):
     benchmark(lambda: E.__pow__(L).derivative())
 
+# def test_transfer_matrix_derivative(benchmark, E):
+#     benchmark(lambda: E.derivative())
+
 # @pytest.fixture()
 # def naive_E(A):
 #     return NaiveSecondOrder.new(A, A, U1, U2)

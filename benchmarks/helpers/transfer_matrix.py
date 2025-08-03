@@ -4,6 +4,7 @@ from ncon import ncon
 from qdmt.transfer_matrix import AbstractTransferMatrix 
 from qdmt.uniform_mps import UniformMps
 
+import opt_einsum as oe
             
 class SecondOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
 
@@ -108,8 +109,8 @@ if __name__ == "__main__":
 
     TFIM = TransverseFieldIsing(.2, .1)
     U1, U2 = TFIM.trotter_second_order()
-    A = UniformMps.new(4, 2)
+    A = UniformMps.new(8, 2)
 
     E = SecondOrderTrotterizedTransferMatrix.new(A, A, U1, U2)
-    E.__pow__(5)
+    E._compute_derivative()
     
