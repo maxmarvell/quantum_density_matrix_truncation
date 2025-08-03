@@ -10,9 +10,7 @@ class Pauli():
                 [-1j, 0]], dtype=complex)
     Sz = np.array([[1, 0],
                 [0, -1]], dtype=complex)
-    
     I = np.eye(2, dtype=complex)
-
 
 class AbstractModel(ABC):
 
@@ -70,11 +68,14 @@ class TransverseFieldIsing(AbstractModel):
 
     ZZ = np.kron(Pauli.Sz, Pauli.Sz) 
     XI = np.kron(Pauli.Sx, Pauli.I)
+    ZI = np.kron(Pauli.Sz, Pauli.I)
 
-    def __init__(self, g: float, delta_t: float | None = None) -> None:
+    def __init__(self, g: float, delta_t: float | None = None, h: float = 0, J: float = 1.) -> None:
         super().__init__(delta_t)
         self.g = g
-        self.H = (self.ZZ+self.g*self.XI).reshape(2, 2, 2, 2)
+        self.J = J
+        self.h = h
+        self.H = (self.J*self.ZZ+self.g*self.XI+self.h*self.ZI).reshape(2, 2, 2, 2)
 
     def _compute_U_half_dt(self) -> None:
         H = self.H.reshape(4, 4)
@@ -96,7 +97,7 @@ class HeisenbergXXZ(AbstractModel):
         super().__init__(delta_t)
         self.h = h
         self.Delta = Delta
-        self.H = (self.Delta*self.ZZ+self.XX+self.YY+self.h*self.ZI).reshape(2, 2, 2, 2)
+        self.H = (self.Delta*self.ZZ+self.XX+self.YY).reshape(2, 2, 2, 2)
 
     def _compute_U_half_dt(self) -> None:
         H = self.H.reshape(4, 4)
