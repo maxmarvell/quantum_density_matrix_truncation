@@ -21,6 +21,8 @@ class AbstractTransferMatrix(ABC):
                     result = power
                 else:
                     result = result @ power
+            if n == 1:
+                return result
             power = power @ power
             n //= 2
         return result
@@ -202,11 +204,12 @@ class SecondOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
     U2: np.ndarray
     _derivative: np.ndarray | None
 
-    def __init__(self, tensor: np.ndarray, tape: list[Self] = []):
+    def __init__(self, tensor: np.ndarray, tape: list[Self] = [], L: int = 1):
         self.tensor = tensor
         self.d1, self.d2, self.p = tensor.shape[0], tensor.shape[3], tensor.shape[1]
         self.tape = tape
         self._derivative = None
+        self.L = L
 
     @classmethod
     def new(cls, A: UniformMps, B: UniformMps, U1: np.ndarray, U2: np.ndarray):
@@ -224,7 +227,7 @@ class SecondOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
         if isinstance(other, SecondOrderTrotterizedTransferMatrix):
             indices = [[-1, -2, -3, -4, 1, 2, 3, 4], [1, 2, 3, 4, -5, -6, -7, -8]]
             tensor = ncon([self.tensor, other.tensor], indices, order=[1, 4, 2, 3])
-            return SecondOrderTrotterizedTransferMatrix(tensor, [self, other])
+            return SecondOrderTrotterizedTransferMatrix(tensor, [self, other], L=self.L+other.L)
             
         return NotImplemented
     
@@ -296,7 +299,7 @@ if __name__ == "__main__":
     TFIM = TransverseFieldIsing(.2, .1)
     U1, U2 = TFIM.trotter_second_order()
     A = UniformMps.new(2, 2)
-    E = SecondOrderTrotterizedTransferMatrix(A, A, U1, U2)
+    E = SecondOrderTrotterizedTransferMatrix.new(A, A, U1, U2)
 
     T = E.__pow__(10)
     T.derivative()
