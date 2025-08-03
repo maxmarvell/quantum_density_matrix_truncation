@@ -30,10 +30,10 @@ class AbstractOptimizer(ABC):
         self.f = f
         self.M = M
 
-    def fg(self, B: UniformMps):
+    def fg(self, B: UniformMps, rB: RightFixedPoint):
         n, p = B.matrix.shape
-        C = self.f.cost(B)
-        D = self.f.derivative(B).reshape(n, p)
+        C = self.f.cost(B, rB)
+        D = self.f.derivative(B, rB).reshape(n, p)
         return C, self.M.project(B.matrix, D)
 
     @abstractmethod
@@ -183,15 +183,15 @@ class ConjugateGradient(AbstractOptimizer):
         beta = (gPy - self.THETA*(yPy/dy)*dg)/dy
 
         eta = self.ETA*dgprev/dd
-        if beta < self.ETA:
-            pass
-            # print("Warning: Resorting to default eta")
+        if beta < eta and self.verbose:
+            print("Warning: Resorting to default eta")
         return max(beta, eta)
 
     def optimize(self):
 
         W = self.B0.matrix
-        C, G = self.fg(self.B0)
+        rB = RightFixedPoint.from_mps(self.B0)
+        C, G = self.fg(self.B0, rB)
         cost_history = [C]
 
         norm_grad = np.sqrt(inner(G, G))
@@ -211,8 +211,6 @@ class ConjugateGradient(AbstractOptimizer):
         iter = 0
         while True:
             if self.precondtion:
-                u_mps = UniformMps(W)
-                rB = RightFixedPoint.from_mps(u_mps)
                 G_tilde = preconditioning(G, rB.tensor)
             else:
                 G_tilde = G
@@ -233,20 +231,23 @@ class ConjugateGradient(AbstractOptimizer):
             G_prev = G
             G_tilde_prev = G_tilde
 
-            alpha, W, C, G, success = linesearch(self.tmp_f, self.M, W, X, C, G, alpha0=alpha)
-
-            B = UniformMps(W)
-            
-            if not B.check_left_orthonormal():
-                print("Warning: Not left orthonormal left orthonormalizing!")
-                B.left_orthorganlize()
-                W = B.matrix
+            alpha, W, C, G, success = linesearch(self.fg, self.M, W, X, C, G, alpha0=alpha)
 
             if not success:
                 alpha = min(alpha, 0.1)
                 W, _ = self.M.retract(W, X, alpha)
-                C, D = self.f.fg(B)
-                G = self.M.project(W, D)
+                B = UniformMps(W)
+                rB = RightFixedPoint.from_mps(B)
+                C, G = self.fg(B, rB)
+            else:
+                alpha = min(alpha * 2, 1)
+                B = UniformMps(W)
+                rB = RightFixedPoint.from_mps(B)
+
+            if not B.check_left_orthonormal():
+                print("Warning: Not left orthonormal left orthonormalizing!")
+                B.left_orthorganlize()
+                W = B.matrix
 
             iter += 1
 
@@ -259,9 +260,6 @@ class ConjugateGradient(AbstractOptimizer):
 
             if self.verbose == True and iter % 10 == 0:
                 print(f"CG: iter {iter:4d}: f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}, α = {alpha:.2e}, β = {beta:.2e}")
-
-            alpha *= 2
-
 
             G_prev = self.M.transport(G_prev, W_prev, X_prev, alpha, W)
             if self.precondtion:
@@ -280,16 +278,19 @@ if __name__ == "__main__":
     from qdmt.model import TransverseFieldIsing
     from qdmt.cost import EvolvedHilbertSchmidt
     from qdmt.manifold import Grassmann
-    from qdmt.evolve import load_state
 
-    filename = 'data/ground_state/gstate_ising2_D6_g1.5.npy'
-    A, _, _ = load_state(filename)
-    tfim = TransverseFieldIsing(0.2, 0.1)
+    theta = phi = np.pi / 2
+
+    psi = np.array([np.cos(theta/2), np.exp(phi*1j)*np.sin(theta/2)])
+
+    A = UniformMps(psi.reshape(1, 2, 1))
+    B = UniformMps.new(4, 2)
+
+    model = TransverseFieldIsing(g=1.05, delta_t=0.1, h=-0.5, J=-1)
     M = Grassmann()
-    f = EvolvedHilbertSchmidt(A, A, tfim, 4, trotterization_order=2)
-    opt = ConjugateGradient(f, M, A, max_iter=1000, verbose=True)
-    opt.optimize()
-
-    D, d, _ = A.tensor.shape
-    print(np.allclose(ncon((opt.f.B.conj, opt.f.B.tensor), ((1, 2, -1), (1, 2, -2))), np.eye(D, dtype=np.complex128), rtol=1e-12))
+    f = EvolvedHilbertSchmidt(A, model, 4, trotterization_order=2)
+    opt = ConjugateGradient(f, M, B, max_iter=1000, verbose=True, tol=1e-6)
+    A_opt, _, _, _ = opt.optimize()
+    D, d, _ = A_opt.tensor.shape
+    print(np.allclose(ncon((A_opt.tensor, A_opt.conj), ((1, 2, -1), (1, 2, -2))), np.eye(D, dtype=np.complex128), rtol=1e-12))
 
