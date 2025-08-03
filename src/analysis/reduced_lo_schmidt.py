@@ -1,65 +1,31 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse
-from scipy.integrate import quad
-from .utils.graph import *
 
 from qdmt.uniform_mps import UniformMps
-from qdmt.transfer_matrix import TransferMatrix
-from qdmt.cost import HilbertSchmidt
 from qdmt.fixed_point import RightFixedPoint
-
-def compute_lo_schmidt(A: UniformMps, A0: UniformMps) -> np.float64:
-    E = TransferMatrix.new(A, A0)
-    fidl = E.fidelity()
-    return -np.log(fidl*fidl.conj())
+from qdmt.cost import HilbertSchmidt
+from analysis.lo_schmidt_echo import compute_lo_schmidt, loschmidt_paper
 
 def compute_reduced_lo_schmidt(A: UniformMps, B: UniformMps, L: int) -> np.float64:
     f = HilbertSchmidt(A, B, L)
     rB = RightFixedPoint.from_mps(B)
     return -np.log(f._compute_rho_A_rho_B(B, rB))/L
 
-def f(z, g0, g1):
-    def theta(k, g):
-        return np.arctan2(np.sin(k), g-np.cos(k))/2
-    def phi(k, g0, g1):
-        return theta(k, g0)-theta(k, g1)
-    def epsilon(k, g1):
-        return -2*np.sqrt((g1-np.cos(k))**2+np.sin(k)**2)
-    def integrand(k):
-        return -1/(2*np.pi)*np.log(np.cos(phi(k, g0, g1))**2 + np.sin(phi(k, g0, g1))**2 * np.exp(-2*z*epsilon(k, g1)))
-
-    return quad(integrand, 0, np.pi)[0]
-
-def loschmidt_paper(t, g0, g1):
-    return (f(t*1j, g0, g1)+f(-1j*t, g0, g1))
-
-def parse():
-    parser = argparse.ArgumentParser(description="Annotate time evolved data.")
-
-    parser.add_argument(
-        'filepath',
-        type=str,
-        nargs='+',
-        help='Relative file path to time evolved data.'
-    )
-    return parser.parse_args()
-
 def main():
-    args = parse()
 
-    args = parse()
+    files = ['data/07-30/D_8-L_08.npz']
+    L = 2
 
-    num_files = len(args.filepath)
-
+    num_files = len(files)
 
     if num_files == 1:
         try:
-            data = np.load(args.filepath[0])
+            data = np.load(files[0])
         except OSError:
-            print(f"Error: unable to read file at location {args.filepath[0]}.")
+            print(f"Error: unable to read file at location {files[0]}.")
 
         A0 = UniformMps(data['state'][0])
+        reduced_lo_schmidt_echo = np.empty_like(data['time'])
         lo_schmidt_echo = np.empty_like(data['time'])
 
         exact_times = np.linspace(0.0, data['time'][-1], int(20*data['time'][-1]))
@@ -67,11 +33,11 @@ def main():
 
         for i in range(len(data['time'])):
             A = UniformMps(data['state'][i])
-            lo_schmidt_echo[i] = compute_lo_schmidt(A, A0)
+            reduced_lo_schmidt_echo[i] = compute_reduced_lo_schmidt(A, A0, L)
             
         _, axs = plt.subplots(3, 1, figsize=(10, 6), sharex=True)
         axs[0].plot(exact_times, exact, label='Exact')
-        axs[0].plot(data['time'], lo_schmidt_echo, '.', label='Approximate')
+        axs[0].plot(data['time'], reduced_lo_schmidt_echo, '+', label='Reduced Lo Schmidt')
         axs[2].set_xlabel('Time (s)')
         axs[0].set_ylabel(r'$-\log\Bigl\{|\langle\psi|\psi\rangle|^2\Bigr\}$')
 
@@ -85,7 +51,7 @@ def main():
 
     else: 
         _, axs = plt.subplots(num_files, 1, figsize=(10, 4 * num_files), sharex=True)   
-        for i, filepath in enumerate(args.filepath):
+        for i, filepath in enumerate(files):
             try:
                 data = np.load(filepath)
             except OSError:
@@ -97,12 +63,8 @@ def main():
 
             for j in range(len(data['time'])):
                 A = UniformMps(data['state'][j])
-                loschmidt[j] = compute_lo_schmidt(A, A0)
+                loschmidt[j] = compute_reduced_lo_schmidt(A, A0)
 
-            exact_times = np.linspace(0.0, data['time'][-1], int(20*data['time'][-1]))
-            exact = [loschmidt_paper(t, 1.5, 0.2) for t in exact_times]
-
-            axs[i].plot(exact_times, exact, label='Exact')
             axs[i].plot(data['time'], loschmidt, '+', label=f'File: {filepath}')
             axs[i].set_ylabel(r'$-\log\bigl\{|\langle\psi|\psi\rangle|^2\bigr\}$')
             axs[i].legend()
