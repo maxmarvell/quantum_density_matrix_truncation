@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 def evolve(A0: UniformMps, 
+           D: int,
            L: int, 
            model: AbstractModel, 
            delta_t: float, 
@@ -20,8 +21,8 @@ def evolve(A0: UniformMps,
            start_t: float = 0.0,
            trotterization_order: int = 2):
 
-    
-    A = UniformMps(A0.tensor)
+    d = A0.p
+    A = UniformMps.new(D, d)
 
     times = np.arange(start_t + delta_t, max_t + delta_t/2, delta_t)
     cost = np.empty_like(times)
@@ -31,11 +32,11 @@ def evolve(A0: UniformMps,
     M = Grassmann()
 
     for i, t in enumerate(times):
-        f = EvolvedHilbertSchmidt(A, A, model, L, trotterization_order)
+        f = EvolvedHilbertSchmidt(A0, model, L, trotterization_order)
         gd = ConjugateGradient(f, M, A, max_iter, tol=tol, verbose=True)
-
         A, cost[i], norm[i], _ = gd.optimize()
         state[i] = A.tensor
+        A0 = A
 
         print(f"\nEvolved the state to t={t}\n\n")
 
@@ -216,9 +217,25 @@ def run_simulation():
                         cost=cost)
 
 if __name__ == "__main__":
-    
-    filename = 'data/ground_state/gstate_ising2_D6_g1.5.npy'
-    A, _, _ = load_state(filename)
-    model = TransverseFieldIsing(0.2, 0.25)
-    evolve(A, 4, model, 0.25, 1, 1000, 1e-5)
 
+    from qdmt.model import TransverseFieldIsing
+    from qdmt.cost import EvolvedHilbertSchmidt
+    from qdmt.manifold import Grassmann
+
+    theta = phi = np.pi / 2
+
+    psi = np.array([np.cos(theta/2), np.exp(phi*1j)*np.sin(theta/2)])
+
+    A = UniformMps(psi.reshape(1, 2, 1))
+
+    filepath = 'data/non_integrable/bond_dimension_8_patch_4_Y'
+    assert check_write_permission(filepath)
+
+    model = TransverseFieldIsing(g=1.05, delta_t=0.1, h=-0.5, J=-1)
+    times, state, cost, norm = evolve(A, 8, 4, model, 0.1, 10, 1000, 1e-8)
+
+    np.savez_compressed(filepath,
+                        time=times,
+                        state=state,
+                        gradient_norm=norm,
+                        cost=cost)

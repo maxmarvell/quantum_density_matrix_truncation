@@ -14,32 +14,22 @@ from qdmt.utils.mps import trotter_step
 from qdmt.fixed_point import RightFixedPoint
 import copy
 
+import opt_einsum as oe
+
 class AbstractCostFunction(ABC):
 
-    def __init__(self, A: UniformMps, B: UniformMps, L: int):
+    def __init__(self, A: UniformMps, L: int):
         self.L = L
         self.A = A
-        self.B = B
-
         AAdag = TransferMatrix.new(self.A, self.A)
         self.rA = RightFixedPoint(AAdag)
 
-    @property
-    def B(self) -> UniformMps:
-        return self._B
-    
-    @B.setter
-    def B(self, value):
-        self._B = value
-        BBdag = TransferMatrix.new(value, value)
-        self.rB = RightFixedPoint(BBdag)
-
     @abstractmethod
-    def cost(self, B: UniformMps | None = None) -> np.float64:
+    def cost(self, B: UniformMps, rB: RightFixedPoint) -> np.float64:
         pass
 
     @abstractmethod
-    def derivative(self, B: UniformMps | None = None) -> np.ndarray:
+    def derivative(self, B: UniformMps, rB: RightFixedPoint) -> np.ndarray:
         pass
 
     def copy(self) -> 'AbstractCostFunction':
@@ -52,80 +42,89 @@ class AbstractCostFunction(ABC):
         D = self.derivative(B)
         return np.abs(C), D.reshape(n, p)
 
-
 class HilbertSchmidt(AbstractCostFunction):
 
-    def __init__(self, A, B, L):
-        super().__init__(A, B, L)
+    def __init__(self, A, L):
+        super().__init__(A, L)
 
         # compute and store the cost of rho(A)^2
         AAdag = TransferMatrix.new(self.A, self.A)
         T_AA = AAdag.__pow__(L).tensor
         self.costAA  = ncon((T_AA, T_AA, self.rA.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
 
+        self.normA = ncon((T_AA, self.rA.tensor), ((1, 1, 3, 2), (3, 2)))
 
-    def cost(self:Self, B: UniformMps | None = None) -> np.float64:
 
-        ABdag = TransferMatrix.new(self.A, self.B)
-        BAdag = TransferMatrix.new(self.B, self.A)
-        BBdag = TransferMatrix.new(self.B, self.B)
+    def cost(self:Self, B: UniformMps, rB: RightFixedPoint) -> np.float64:
+
+        BBdag = TransferMatrix.new(B, B)
+
+        self.A.correlation_length()
 
         L = self.L
         res = 0
 
         # rho(B)^2 contribution
         T_BB = BBdag.__pow__(L).tensor
-        res += ncon((T_BB, T_BB, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
+        res += ncon((T_BB, T_BB, rB.tensor, rB.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
 
         # rho(A)^2 contribution
         res += self.costAA
 
-        # 2rho(A)rho(B) contribution
-        T_AB = ABdag.__pow__(L).tensor
-        T_BA = BAdag.__pow__(L).tensor
-        res -= 2 * ncon((T_AB, T_BA, self.rB.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6)))
+        # 2*rho(A)*rho(B) contribution
+        res -= 2 * self._compute_rho_A_rho_B(B, rB)
 
         return np.abs(res)
-    
-    def derivative(self):
 
-        ABdag = TransferMatrix.new(self.A, self.B)
-        BAdag = TransferMatrix.new(self.B, self.A)
-        BBdag = TransferMatrix.new(self.B, self.B)
+    def _compute_rho_A_rho_B(self, B: UniformMps, rB: RightFixedPoint):
+
+        ABdag = TransferMatrix.new(self.A, B)
+        BAdag = TransferMatrix.new(B, self.A)
+
+        T_AB = ABdag.__pow__(self.L).tensor
+        T_BA = BAdag.__pow__(self.L).tensor
+
+        return abs(ncon((T_AB, T_BA, rB.tensor, self.rA.tensor), ((1, 2, 3, 4), (2, 1, 5, 6), (5, 4), (3, 6))))
+    
+    def derivative(self, B: UniformMps, rB: RightFixedPoint):
+
+        ABdag = TransferMatrix.new(self.A, B)
+        BAdag = TransferMatrix.new(B, self.A)
+        BBdag = TransferMatrix.new(B, B)
 
         L = self.L
-        res = np.zeros_like(self.B.tensor, dtype=np.complex128)
+        res = np.zeros_like(B.tensor, dtype=np.complex128)
 
         # rho(B)^2 contribution
         T_BB = BBdag.__pow__(L)
         D = T_BB.derivative()
-        res += 2 * ncon((D, T_BB.tensor, self.rB.tensor, self.rB.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6)))
+        res += 2 * ncon((D, T_BB.tensor, rB.tensor, rB.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6)))
 
         # right fixed point
-        tensors = (T_BB.tensor, T_BB.tensor, self.rB.tensor)
+        tensors = (T_BB.tensor, T_BB.tensor, rB.tensor)
         indices = ((1, 2, 3, -1), (2, 1, -2, 4), (3, 4))
         v = ncon(tensors, indices)
-        res += 2 * self.rB.derivative(v)
+        res += 2 * rB.derivative(v)
 
         # 2rho(A)rho(B) contribution
         T_AB = ABdag.__pow__(L)
         T_BA = BAdag.__pow__(L)
         D = T_AB.derivative()
-        res -= 2 * ncon((D, T_BA.tensor, self.rB.tensor, self.rA.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6)))
+        res -= 2 * ncon((D, T_BA.tensor, rB.tensor, self.rA.tensor), ((1, 2, 3, 4, -1, -2, -3), (2, 1, 5, 6), (5, 4), (3, 6)))
 
         # right fixed point
         tensors = (T_AB.tensor, T_BA.tensor, self.rA.tensor)
         indices = ((1, 2, 3, -1), (2, 1, -2, 4), (3, 4))
         v = ncon(tensors, indices)
-        res -= 2 * self.rB.derivative(v)
+        res -= 2 * rB.derivative(v)
 
         return res
 
 class EvolvedHilbertSchmidt(AbstractCostFunction):
 
-    def __init__(self, A: UniformMps, B: UniformMps, model: AbstractModel, L: int, trotterization_order: int = 2):
+    def __init__(self, A: UniformMps, model: AbstractModel, L: int, trotterization_order: int = 2):
 
-        super().__init__(A, B, L)
+        super().__init__(A, L)
 
         self.trotterization_order = trotterization_order
 
@@ -149,16 +148,15 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
             self.purity_A = self._compute_second_trotterized_purity()
             self._compute_auxillary_second_trotterized()
 
+            # assume A and B have same shape
+            self._compile_contractions()
+
         else:
             raise ValueError(f"Trotterization order must be 1 or 2, but got {trotterization_order}")
 
-    def cost(self, B: UniformMps | None = None, rB: RightFixedPoint | None = None):
+        self.rhoA = self._compute_rhoA()
 
-        if B == None:
-            B = self.B
-
-        if rB == None:
-            rB = self.rB
+    def cost(self, B: UniformMps, rB: RightFixedPoint):
 
         hilbert_schmidt_distance = 0 + 0j
 
@@ -173,15 +171,9 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
         return np.abs(hilbert_schmidt_distance)
 
-    def derivative(self, B: UniformMps | None = None, rB: RightFixedPoint | None = None):
+    def derivative(self, B: UniformMps, rB: RightFixedPoint):
 
-        if B == None:
-            B = self.B
-
-        if rB == None:
-            rB = self.rB
-
-        derivative = np.zeros_like(self.B.tensor, dtype=np.complex128)
+        derivative = np.zeros_like(B.tensor, dtype=np.complex128)
 
         # rho(B)^2 contribution
         derivative += 2 * self._compute_derivative_rho_B_rho_B(B, rB)
@@ -348,41 +340,62 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
     
     def _compute_trace_product_rhoA_rhoB(self, B: UniformMps, rB: RightFixedPoint) -> np.complex128:
 
-        A, U1, U2, L = self.A, self.U1, self.U2, self.L
+        # heurisistic to determine best contraction pathway
+        DA = self.A.d
+        DB = B.d
+        d = B.p
+        L = self.L
 
-        if self.trotterization_order == 1:
+        if (DA**3*DB**3*d**6*np.log(L) <= d**(2*L)):
+                
+            A, U1, U2, L = self.A, self.U1, self.U2, self.L
 
-            ABdag = FirstOrder.new(A, B, U1, U2)
-            BAdag = FirstOrder.new(B, A, U2.conj().transpose(2, 3, 0, 1), U1.conj().transpose(2, 3, 0, 1))
+            if self.trotterization_order == 1:
 
-            T_AB = ABdag.__pow__(L//2).tensor
-            T_BA = BAdag.__pow__(L//2).tensor
+                ABdag = FirstOrder.new(A, B, U1, U2)
+                BAdag = FirstOrder.new(B, A, U2.conj().transpose(2, 3, 0, 1), U1.conj().transpose(2, 3, 0, 1))
 
-            if L % 2 == 0:
-                tensors = (self.left_auxillary, T_AB, T_BA, self.right_auxillary, self.rA.tensor, rB.tensor)
-                indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
-            else:
-                tensors = [self.left_auxillary, T_AB, T_BA, B.conj, rB.tensor, B.tensor, self.right_auxillary]
-                indices  = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
+                T_AB = ABdag.__pow__(L//2).tensor
+                T_BA = BAdag.__pow__(L//2).tensor
 
-        elif self.trotterization_order == 2:
+                if L % 2 == 0:
+                    tensors = (self.left_auxillary, T_AB, T_BA, self.right_auxillary, self.rA.tensor, rB.tensor)
+                    indices = ((1, 2, 3, 4), (3, 4, 5, 6, 7, 8), (5, 2, 1, 9, 10, 11), (10, 11, 7, 12), (6, 12), (9, 8))
+                else:
+                    tensors = [self.left_auxillary, T_AB, T_BA, B.conj, rB.tensor, B.tensor, self.right_auxillary]
+                    indices  = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
 
-            ABdag = SecondOrder.new(A, B, U1, U2)
-            BAdag = SecondOrder.new(B, A, U1.conj().transpose(2, 3, 0, 1), U2.conj().transpose(2, 3, 0, 1))
+            elif self.trotterization_order == 2:
 
-            T_AB = ABdag.__pow__(L//2).tensor
-            T_BA = BAdag.__pow__(L//2).tensor
+                ABdag = SecondOrder.new(A, B, U1, U2)
+                BAdag = SecondOrder.new(B, A, U1.conj().transpose(2, 3, 0, 1), U2.conj().transpose(2, 3, 0, 1))
 
-            tensors = [self.left_auxillary, T_AB, T_BA, rB.tensor, self.right_auxillary]
+                T_AB = ABdag.__pow__(L//2).tensor
+                T_BA = BAdag.__pow__(L//2).tensor
+
+                tensors = [self.left_auxillary, T_AB, T_BA, rB.tensor, self.right_auxillary]
+                indices = [
+                    [1, 2, 3, 4, 5, 6],
+                    [6, 5, 4, 7, 15, 14, 13, 9],
+                    [7, 3, 2, 1, 8, 12, 11, 10],
+                    [8, 9],
+                    [10, 11, 12, 13, 14, 15]
+                ]
+
+            return ncon(tensors, indices)
+
+        else:
+            rhoB = self._compute_rhoB(B, rB)
+
+            L = self.L
+            tensors = (self.rhoA, rhoB)
             indices = [
-                [1, 2, 3, 4, 5, 6],
-                [6, 5, 4, 7, 15, 14, 13, 9],
-                [7, 3, 2, 1, 8, 12, 11, 10],
-                [8, 9],
-                [10, 11, 12, 13, 14, 15]
+                [i for i in range(1, 2*L+1)],
+                [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
             ]
+            rhoArhoB = ncon(tensors, indices)
 
-        return ncon(tensors, indices)
+            return rhoArhoB
 
     def _compute_trace_product_rhoB_rhoB(self, B: UniformMps, rB: RightFixedPoint) -> np.complex128:
         BBdag = TransferMatrix.new(B, B)
@@ -391,35 +404,66 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
     def _compute_derivative_rho_A_rho_B(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
 
-        A, L, U1, U2 = self.A, self.L, self.U1, self.U2
-        res = np.zeros_like(B.tensor, dtype=np.complex128)
+        # heurisistic to determine best contraction pathway
+        DA = self.A.d
+        DB = B.d
+        d = B.p
+        L = self.L
 
-        if self.trotterization_order == 1:
-            ABdag = FirstOrder.new(A, B, U1, U2)
-            BAdag = FirstOrder.new(B, A, U2.conj().transpose(2, 3, 0, 1), U1.conj().transpose(2, 3, 0, 1))
+        if (DA**3*DB**5*d**7*np.log(L) <= d**(2*L)*L*DB**2):
+
+            A, L, U1, U2 = self.A, self.L, self.U1, self.U2
+            res = np.zeros_like(B.tensor, dtype=np.complex128)
+
+            if self.trotterization_order == 1:
+                ABdag = FirstOrder.new(A, B, U1, U2)
+                BAdag = FirstOrder.new(B, A, U2.conj().transpose(2, 3, 0, 1), U1.conj().transpose(2, 3, 0, 1))
+            else:
+                ABdag = SecondOrder.new(A, B, U1, U2)
+                BAdag = SecondOrder.new(B, A, U1.conj().transpose(2, 3, 0, 1), U2.conj().transpose(2, 3, 0, 1))
+
+            T_BA = BAdag.__pow__(L // 2)
+            T_AB = ABdag.__pow__(L // 2)
+            
+            # rho(A(t+dt))rho(B) contribution
+            D = T_AB.derivative()
+
+            # compute central contribution
+            if self.trotterization_order == 1:
+                res += self._contract_rhoA_rhoB_central_derivative(D, T_AB, T_BA, B, rB)
+            else:
+                res += self._contract_rhoA_rhoB_central_derivative(D, T_BA.tensor, rB.tensor)
+
+            res += self._contract_rhoA_rhoB_fixed_point_derivative(T_AB, T_BA, B, rB)
+            return res
+
         else:
-            ABdag = SecondOrder.new(A, B, U1, U2)
-            BAdag = SecondOrder.new(B, A, U1.conj().transpose(2, 3, 0, 1), U2.conj().transpose(2, 3, 0, 1))
+            L, rhoA = self.L, self.rhoA
+            D = np.zeros_like(B.tensor)
 
-        T_BA = BAdag.__pow__(L // 2)
-        T_AB = ABdag.__pow__(L // 2)
-        
-        # rho(A(t+dt))rho(B) contribution
-        D = T_AB.derivative()
+            # central
+            tmp = np.zeros_like(B.tensor)
+            for i in range(L):
+                drhoB = self.compute_drhoB(i, B, rB)
 
-        # compute central contribution
-        res += self._contract_rhoA_rhoB_central_derivative(D, T_AB, T_BA, B, rB)
-        res += self._contract_rhoA_rhoB_fixed_point_derivative(T_AB, T_BA, B, rB)
+                tensors = [rhoA, drhoB]
+                indices = [
+                    [i for i in range(1, 2*L+1)],
+                    [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)] + [-1, -2, -3]
+                ]
+                tmp += ncon(tensors, indices)
 
-        return res
+            drhoBrhoAdrB = self.compute_drhoBrhoAdrB(B)
+            tmp += rB.derivative(drhoBrhoAdrB.T)
+
+            return tmp
+
 
     def _compute_derivative_rho_B_rho_B(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
         
-        res = np.zeros_like(self.B.tensor, dtype=np.complex128)
+        res = np.zeros_like(B.tensor, dtype=np.complex128)
 
-        BBdag = TransferMatrix.new(self.B, self.B)
-
-        rB = self.rB
+        BBdag = TransferMatrix.new(B, B)
 
         T_BB = BBdag ** self.L
 
@@ -437,7 +481,7 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
 
         return res
         
-    def _contract_rhoA_rhoB_central_derivative(self, D, T_AB, T_BA, B: UniformMps, rB: RightFixedPoint):
+    def _contract_rhoA_rhoB_central_derivative(self, D: np.ndarray, T_AB: TransferMatrix, T_BA: TransferMatrix, B: UniformMps, rB: RightFixedPoint):
 
         L = self.L
 
@@ -452,12 +496,12 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
             indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, -1], [5, 2, 1, 8, 9, 10], [11, -3], [8, 12, 11], [6, 7, -2, 12, 9, 10]]
             tmp = ncon(tensors, indices)
 
-            tensors = [self.left_auxillary, D, T_BA.tensor, self.B.conj, rB.tensor, B.tensor, self.right_auxillary]
+            tensors = [self.left_auxillary, D, T_BA.tensor, B.conj, rB.tensor, B.tensor, self.right_auxillary]
             indices = [[1, 2, 3, 4], [3, 4, 5, 6, 7, 8, -1, -2, -3], [5, 2, 1, 9, 10, 11], [8, 12, 13], [14, 13], [9, 15, 14], [6, 7, 12, 15, 10, 11]]
             return ncon(tensors, indices) + tmp
 
         elif self.trotterization_order == 2:
-            
+
             tensors = [self.left_auxillary, D, T_BA.tensor, rB.tensor, self.right_auxillary]
             indices = [
                 [1, 2, 3, 4, 5, 6],
@@ -493,58 +537,118 @@ class EvolvedHilbertSchmidt(AbstractCostFunction):
         v = ncon(tensors, indices)
         return rB.derivative(v)
     
-if __name__ == "__main__":
+    def _compile_contractions(self) -> None:
+
+        D, d, _ = self.A.tensor.shape
+        eq = 'abcdef,fedgonmipqr,gcbahlkj,hi,jklmno->pqr'
+        constants = [0, 4]
+        ops = [
+            self.left_auxillary,
+            (D, d, d, D, D, d, d, D, D, d, D), 
+            (D, d, d, D, D, d, d, D),
+            (D, D),
+            self.right_auxillary
+        ]
+
+        expr = oe.contract_expression(eq, *ops, constants=constants)
+        self._contract_rhoA_rhoB_central_derivative = expr
+
+    def _compute_rhoA(self) -> npt.NDArray:
+        
+        A, U1, U2, rA, L = self.A, self.U1, self.U2, self.rA, self.L
+
+        N = 0
+        if L % 2 == 0 and self.trotterization_order == 1:
+            N = L + 2
+        elif self.trotterization_order == 1:
+            N = L + 3
+        elif L % 2 == 0 and self.trotterization_order == 2:
+            N = L + 4
+
+        mps = A.mps_chain(N)
+
+        # first trotter step
+        mps = trotter_step(mps, U1)
+
+        # second trotter step
+        mps = trotter_step(mps, U2, start=1)
+
+        # conditionally apply final trotter step
+        if self.trotterization_order == 2:
+            mps = trotter_step(mps, U1)
+
+        tensors = [mps, mps.conj(), rA.tensor]
+
+        if self.trotterization_order == 1: 
+            indices = [
+                [1, 2] + [-(i+1) for i in range(L)] + ([3, 4] if (L%2 == 0) else [3, 4, 5]),
+                [1, 2] + [-(i+L+1) for i in range(L)] + ([3, 5] if (L%2 == 0) else [3, 4, 6]),
+                [4, 5] if (L%2 == 0) else [5, 6]
+            ]
+        else:
+            indices = [
+                [1, 2, 3] + [-(i+1) for i in range(L)] + [4, 5, 6],
+                [1, 2, 3] + [-(i+L+1) for i in range(L)] + [4, 5, 7],
+                [6, 7]
+            ]
+
+        rhoA = ncon(tensors, indices)
+
+        return rhoA
     
-    Da = 5
-    Db = 5
-    p = 2
+    def _compute_rhoB(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
 
-    A = UniformMps.new(Da, p)
-    B = UniformMps.new(Db, p)
+        L = self.L
+        chain = B.mps_chain(self.L)
 
-    from qdmt.model import TransverseFieldIsing
+        tensors = (chain, chain.conj(), rB.tensor)
+        indices = [
+            [1] + [-i for i in range(1, L+1)] + [2],
+            [1] + [-i for i in range(L+1, 2*L+1)] + [3],
+            [2, 3]
+        ]
 
-    tfim = TransverseFieldIsing(0.1, 0.1)
+        rhoB = ncon(tensors, indices)
+        return rhoB
+    
+    def compute_drhoB(self, i: int, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
 
-    f = EvolvedHilbertSchmidt(A, B, tfim, L=10)
-    f.cost()
-    f.derivative()
+        L = self.L
+        chain = B.mps_chain(self.L)
+        sub_chains = [B.mps_chain(i).conj(), B.mps_chain(L-i-1).conj()]
 
-    # assert cost 0
-    # assert np.allclose(cost(A, A, U, U, 4), 0j)
-    # assert np.allclose(cost(B, B, U, U, 10), 0j)
+        tensors = [chain, *sub_chains, np.eye(B.p), rB.tensor]
+        indices = [
+            [1] + [-i for i in range(1, L+1)] + [2],
+            [1] + [-i for i in range(L+1, L+1+i)] + [-2*L-1],
+            [-2*L-3] + [-i for i in range(L+2+i, 2*L+1)] + [3],
+            [-L-1-i, -2*L-2],
+            [2, 3]
+        ]
+        res = ncon(tensors, indices)
 
-    # pA = A.reduced_density_mat(3)
-    # pB = B.reduced_density_mat(3)
+        return res
 
-    # assert np.allclose(ncon((pA, pA), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5))) + ncon((pB, pB), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5))) - 2*ncon((pA, pB), ((1, 2, 3, 4, 5, 6), (2, 1, 4, 3, 6, 5))), cost(A, B, 3))
+    def compute_drhoBrhoAdrB(self, B: UniformMps) -> npt.NDArray[np.complex128]:
 
-    # ABdag, BAdag = transfer_blocks(A, B)
+        rhoA, L = self.rhoA, self.L
+        chain = B.mps_chain(self.L)
 
-    # _A = A.gauge()
+        tensors = (chain, chain.conj())
+        indices = [
+            [1] + [-i for i in range(1, L+1)] + [-(2*L+1)],
+            [1] + [-i for i in range(L+1, 2*L+1)] + [-(2*L+2)]
+        ]
+        drhoBdrB = ncon(tensors, indices)
 
-    # assert not np.allclose(A.value, _A.value)
-    # assert np.allclose(_A.r, ncon((_A.transfer_matrix.value, _A.r), ((-1, -2, 1, 2), (1, 2))))
+        tensors = [drhoBdrB, rhoA]
+        indices = [
+            [i for i in range(1, 2*L+1)] + [-1, -2],
+            [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
+        ]
+        drhoBrhoAdrB = ncon(tensors, indices)
 
-    # check under unitary gauge transform the cost is zero
-    # assert np.allclose(cost(A, _A, 3), 0j)
-    # assert np.allclose(cost(A, _A, 10), 0j)
+        return drhoBrhoAdrB
 
-    # # test fidelity
-    # L = 50
-    # r = A.fidelity(B)
-
-    # print(r**(2*L))
-    # print(cost(A, B, L))
-
-    # D, p = 5, 2
-    # SEED = 42
-    # np.random.seed(SEED)
-    # A = UniformMps.new(D, p)
-    # B = UniformMps.new(D, p)
-    # f = HilbertSchmidt(A, B, 4)
-    # print(f.cost())
-    # D = f.derivative()
-
-
-    # print(D)
+if __name__ == "__main__":
+    pass
