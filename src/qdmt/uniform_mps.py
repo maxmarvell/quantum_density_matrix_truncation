@@ -79,6 +79,13 @@ class UniformMps():
         r = eigs(E.reshape(d1*d2, d1*d2), k=1, which='LM', return_eigenvectors=False)
         return np.abs(r[0])
     
+    def correlation_length(self):
+        d = self.d
+        E = ncon((self.tensor, self.conj), ((-1, 1, -3), (-2, 1, -4)))
+        r = eigs(E.reshape(d*d, d*d), k=2, which='LM', return_eigenvectors=False)
+        r_sorted = np.sort(np.abs(r))[::-1]
+        return -1/np.log(np.abs(r_sorted[1])/np.abs(r_sorted[0]))
+    
     def normalization(self):
         d = self.d
         E = ncon((self.tensor, self.conj), ((-1, 1, -3), (-2, 1, -4)))
@@ -94,4 +101,17 @@ class UniformMps():
         self.tensor = A.reshape(self.d, self.p, self.d)
             
 if __name__ == "__main__":
-    pass
+    theta = phi = np.pi / 2
+
+    D = 6
+    psi = np.array([np.cos(theta/2), np.exp(phi*1j)*np.sin(theta/2)])
+
+    A = np.zeros((D, 2, D), dtype=np.complex128)
+    A[0, 0, 0] = np.cos(theta / 2)
+    A[0, 1, 0] = np.exp(phi * 1j) * np.sin(theta / 2)
+
+    print(psi)
+
+    mps = UniformMps(A)
+
+    print(mps.check_left_orthonormal())
