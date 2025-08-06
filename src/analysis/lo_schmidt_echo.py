@@ -15,7 +15,7 @@ def compute_lo_schmidt(A: UniformMps, A0: UniformMps) -> np.float64:
     return -np.log(fidl*fidl.conj())
 
 def compute_reduced_lo_schmidt(A: UniformMps, B: UniformMps, L: int) -> np.float64:
-    f = HilbertSchmidt(A, B, L)
+    f = HilbertSchmidt(A, L)
     rB = RightFixedPoint.from_mps(B)
     return -np.log(f._compute_rho_A_rho_B(B, rB))/L
 
