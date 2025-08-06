@@ -19,12 +19,12 @@ def main():
     assert check_write_permission(filepath)
 
     model = TransverseFieldIsing(g=1.05, delta_t=0.1, h=-0.5, J=-1)
-    times, state, cost, norm = evolve(A, 12, 6, model, 0.1, 10, 2000, 1e-10)
+    times, state, cost, norm = evolve(A, 12, 6, model, 0.1, 10, 1000, 1e-8)
 
-    times = np.concatenate([0,], times)
-    state = np.concatenate([0,], state)
-    cost = np.concatenate([0,], cost)
-    norm = np.concatenate([0,], norm)
+    # times = np.concatenate([0,], times)
+    # state = np.concatenate([0,], state)
+    # cost = np.concatenate([0,], cost)
+    # norm = np.concatenate([0,], norm)
 
     np.savez_compressed(filepath,
                         time=times,
