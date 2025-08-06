@@ -156,7 +156,7 @@ class ConjugateGradient(AbstractOptimizer):
     THETA = 1.0
     ETA = 0.4
 
-    def __init__(self, f: AbstractCostFunction, M: AbstractManifold, B0: UniformMps, max_iter: int, tol: float = 1e-8, restart: int = np.inf,  precondition: bool = True, verbose: bool = False,):
+    def __init__(self, f: AbstractCostFunction, M: AbstractManifold, B0: UniformMps, max_iter: int, tol: float = 1e-8, restart: int = 100,  precondition: bool = True, verbose: bool = False,):
         super().__init__(f, M)
         self.B0 = B0
         self.rB0 = RightFixedPoint.from_mps(B0)
