@@ -291,15 +291,28 @@ class SecondOrderTrotterizedTransferMatrix(AbstractTransferMatrix):
             return self._derivative
         
         return NotImplemented
+    
+    def to_matrix(self):
+        d1, d2, p = self.d1, self.d2, self.p
+        return self.tensor.reshape((d1*d2*p**2, d1*d2*p**2))
+
+    def fidelity(self) -> np.complex128:
+        M = self.to_matrix()
+        r = eigs(M, k=5, which='LM', return_eigenvectors=False)
+        return r
         
 
 if __name__ == "__main__":
 
     from qdmt.model import TransverseFieldIsing
-    TFIM = TransverseFieldIsing(.2, .1)
+    TFIM = TransverseFieldIsing(.2, .05)
     U1, U2 = TFIM.trotter_second_order()
     A = UniformMps.new(2, 2)
     E = SecondOrderTrotterizedTransferMatrix.new(A, A, U1, U2)
+    es = E.fidelity()
+
+    print(es**10)
+    print(np.abs(es))
 
     T = E.__pow__(10)
     T.derivative()

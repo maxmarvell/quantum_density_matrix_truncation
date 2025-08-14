@@ -1,6 +1,6 @@
 from qdmt.uniform_mps import UniformMps
 from qdmt.model import AbstractModel, TransverseFieldIsing
-from qdmt.cost import EvolvedHilbertSchmidt
+from qdmt.cost import EvolvedHilbertSchmidt, NaiveEvolvedHilbertSchmidt as Naive
 from qdmt.optimisation import ConjugateGradient
 from qdmt.manifold import Grassmann
 
@@ -32,7 +32,10 @@ def evolve(A0: UniformMps,
     M = Grassmann()
 
     for i, t in enumerate(times):
-        f = EvolvedHilbertSchmidt(A0, model, L, trotterization_order)
+        if (D**8*d**7*np.log(L) < d**(2*L)*L*D**2*d and D**6*d**6*np.log(L) < d**(2*L)):
+            f = EvolvedHilbertSchmidt(A0, model, L, trotterization_order)
+        else:
+            f = Naive(A0, model, L, trotterization_order)
         gd = ConjugateGradient(f, M, A, max_iter, tol=tol, verbose=True)
         A, cost[i], norm[i], _ = gd.optimize()
         state[i] = A.tensor
@@ -142,9 +145,7 @@ def load_state(filepath: str):
                 "time": [0],
                 "state": [raw_data],
                 "gradient_norm": [np.nan],
-                "cost": [np.nan],
-                "tol" : [np.nan],
-                "max_iters": [np.nan]
+                "cost": [np.nan]
             }
             return UniformMps(raw_data), previous_data, 0
         
