@@ -5,7 +5,7 @@ from qdmt.model import TransverseFieldIsing
 from qdmt.evolve import check_write_permission, evolve
 
 '''
-    EXPERIMENT: TRY LARGER PATCH SIZE WITH HIGHER BOND DIMENSION
+    EXPERIMENT: RUN WITH SAME PARAMETERS AS LESLIE
 '''
 
 def main():
@@ -15,7 +15,7 @@ def main():
 
     A = UniformMps(psi.reshape(1, 2, 1))
 
-    filepath = 'data/non_integrable/experiment_I/bond_dimension_12_patch_6'
+    filepath = 'data/non_integrable/bond_dimension_12_patch_6'
     assert check_write_permission(filepath)
 
     model = TransverseFieldIsing(g=1.05, delta_t=0.1, h=-0.5, J=-1)
