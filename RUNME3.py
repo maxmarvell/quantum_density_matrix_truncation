@@ -17,7 +17,7 @@ def main():
     assert check_write_permission(filepath)
 
     model = TransverseFieldIsing(g=0.2, delta_t=0.1)
-    times, state, cost, norm = evolve(A, 12, 6, model, 0.1, 25, 1000, 1e-6, start_time)
+    times, state, cost, norm = evolve(A, 6, 12, model, 0.01, 25, 1000, 1e-6, start_time)
 
     # if prev_data:
     #     times = np.concatenate((prev_data['time'], times))
