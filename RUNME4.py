@@ -5,7 +5,7 @@ from qdmt.model import TransverseFieldIsing
 from qdmt.evolve import load_state, check_write_permission, evolve
 
 '''
-    EXPERIMENT: RUN WITH SAME PARAMETERS AS LESLIE
+    TRY AND GET BEST RESULTS: INTEGRABLE
 '''
 
 def main():
@@ -13,17 +13,11 @@ def main():
     loadfile = 'data/ground_state/gstate_ising2_D8_g1.5.npy'
     A, prev_data, start_time = load_state(loadfile)
 
-    filepath = 'data/non_integrable/bond_dimension_14_patch_8'
+    filepath = 'data/integrable/bond_dimension_12_patch_size_6'
     assert check_write_permission(filepath)
 
-    model = TransverseFieldIsing(g=0.2, delta_t=0.1)
-    times, state, cost, norm = evolve(A, 14, 8, model, 0.1, 20, 100, 1e-8, start_time)
-
-    # if prev_data:
-    #     times = np.concatenate((prev_data['time'], times))
-    #     state = np.concatenate((prev_data['state'], state))
-    #     cost = np.concatenate((prev_data['cost'], cost))
-    #     norm = np.concatenate((prev_data['gradient_norm'], norm))
+    model = TransverseFieldIsing(g=0.2, delta_t=0.01)
+    times, state, cost, norm = evolve(A, 6, 12, model, 0.1, 25, 1000, 1e-6, start_time)
 
     np.savez_compressed(filepath,
                         time=times,

@@ -5,7 +5,7 @@ from qdmt.model import TransverseFieldIsing
 from qdmt.evolve import check_write_permission, evolve
 
 '''
-    EXPERIMENT: TRY MORE MODERATE PATCH SIZE
+    TRY AND GET THE BEST RESULTS: NON-INTEGRABLE
 '''
 
 def main():
@@ -15,11 +15,11 @@ def main():
 
     A = UniformMps(psi.reshape(1, 2, 1))
 
-    filepath = 'data/non_integrable/experiment_I/bond_dimension_8_patch_4'
+    filepath = 'data/non_integrable/bond_dimension_6_patch_12'
     assert check_write_permission(filepath)
 
-    model = TransverseFieldIsing(g=1.05, delta_t=0.1, h=-0.5, J=-1)
-    times, state, cost, norm = evolve(A, 8, 4, model, 0.1, 10, 1000, 1e-8)
+    model = TransverseFieldIsing(g=1.05, delta_t=0.01, h=-0.5, J=-1)
+    times, state, cost, norm = evolve(A, 6, 12, model, 0.01, 10, 1000, 1e-6)
 
     # times = np.concatenate([0,], times)
     # state = np.concatenate([0,], state)
