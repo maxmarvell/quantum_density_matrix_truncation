@@ -15,11 +15,11 @@ def main():
 
     A = UniformMps(psi.reshape(1, 2, 1))
 
-    filepath = 'data/non_integrable/bond_dimension_6_patch_12'
+    filepath = 'data/non_integrable/bond_dimension_8_patch_24'
     assert check_write_permission(filepath)
 
     model = TransverseFieldIsing(g=1.05, delta_t=0.01, h=-0.5, J=-1)
-    times, state, cost, norm = evolve(A, 6, 12, model, 0.01, 10, 1000, 1e-6)
+    times, state, cost, norm = evolve(A, 8, 24, model, 0.01, 10, 1000, 1e-6)
 
     # times = np.concatenate([0,], times)
     # state = np.concatenate([0,], state)
