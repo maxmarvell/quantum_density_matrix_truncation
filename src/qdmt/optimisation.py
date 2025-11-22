@@ -221,6 +221,7 @@ class ConjugateGradient(AbstractOptimizer):
         iter = 0
         flag = False
         while True:
+            # print(iter)
             if self.precondtion:
                 G_tilde = preconditioning(G, rB.tensor)
             else:

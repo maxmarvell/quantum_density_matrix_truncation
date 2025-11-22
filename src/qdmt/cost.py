@@ -730,6 +730,8 @@ class NaiveEvolvedHilbertSchmidt(AbstractCostFunction):
                 [6, 7]
             ]
 
+     
+
         rhoA = ncon(tensors, indices)
 
         return rhoA
@@ -901,6 +903,305 @@ class NaiveEvolvedHilbertSchmidt(AbstractCostFunction):
         D -= 2*rB.derivative(drhoBrhoAdrB.T)
 
         return D
+    
+
+
+class NaiveEvolvedHilbertSchmidt_NoTimeEvolution(AbstractCostFunction):
+    def __init__(self, A: UniformMps, L: int, GPU: bool = False):
+        print(" no time evolution")
+        self.A, self.L = A, L
+        AAdag = TransferMatrix.new(A, A)
+        self.rA = AAdag.right_fixed_point()
+
+        
+        self.GPU = GPU
+
+        
+        # one time computation
+        self.rhoA = self.compute_rhoA()
+        self.rhoArhoA = self.compute_rhoArhoA()
+
+
+    def build_rho(self, MPS: UniformMps | None = None,
+              rfp: np.ndarray | None = None
+              ) -> npt.NDArray[np.complex128]:
+        """
+        Build the 2L-index density matrix ρ for an MPS and right fixed point.
+        If no arguments are provided, use the default A and rA.
+        """
+
+        # Default to the internal uniform MPS A and its right FP
+        if MPS is None:
+            MPS = self.A
+        if rfp is None:
+            rfp = self.rA.tensor
+
+        L = self.L
+
+        # Build the MPS chain
+        chain = MPS.to_mps_chain(L)
+
+        # Index wiring identical for both rhoA and rhoB
+        ket_idx = [1] + [-(i+1)     for i in range(L)] + [2]
+        bra_idx = [1] + [-(L+i+1)   for i in range(L)] + [3]
+        env_idx = [2, 3]
+
+        return ncon([chain, chain.conj(), rfp],
+                    [ ket_idx, bra_idx,   env_idx ])
+
+
+
+    def compute_rhoA(self) -> npt.NDArray[np.complex128]:
+        return self.build_rho()
+
+
+    def compute_rhoB(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
+        return self.build_rho(MPS=B, rfp=rB.tensor)
+
+    # def compute_rhoA(self) -> npt.NDArray[np.complex128]:
+
+    #     A, rA, L = self.A, self.rA, self.L
+        
+    #     mps = A.to_mps_chain(L)
+
+        
+
+    #     tensors = [mps, mps.conj(), rA.tensor]
+
+    #     indices = [[1] + [-(i+1) for i in range(L)] + [2],[1] + [-(i+L+1) for i in range(L)] + [3] , [2,3] ]    
+
+
+    #     rhoA = ncon(tensors, indices)
+
+    #     return rhoA
+    
+    # def compute_rhoB(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
+
+    #     L = self.L
+    #     chain = B.to_mps_chain(self.L)
+
+    #     # compute drhoBdrB
+    #     tensors = (chain, chain.conj(), rB.tensor)
+    #     indices = [
+    #         [1] + [-i for i in range(1, L+1)] + [2],
+    #         [1] + [-i for i in range(L+1, 2*L+1)] + [3],
+    #         [2, 3]
+    #     ]
+    #     drhoBdrB = ncon(tensors, indices)
+
+    #     # tensors = [drhoBdrB, rB.tensor]
+    #     # indices
+
+    #     # rhoB = ncon(tensors, indices)
+    #     return drhoBdrB
+    
+
+    def contract_rhos(self, rhoA, rhoB):
+        L = self.L
+
+        # A indices: [k1..kL, b1..bL]
+        A_idx = list(range(1, 2*L+1))
+
+        # B indices: [b1..bL, k1..kL]
+        B_idx = list(range(L+1, 2*L+1)) + list(range(1, L+1))
+
+        return ncon([rhoA, rhoB], [A_idx, B_idx])
+    
+
+    def compute_rhoArhoB(self, rhoB):
+        return self.contract_rhos(self.rhoA, rhoB)
+
+    def compute_rhoArhoA(self):
+        return self.contract_rhos(self.rhoA, self.rhoA)
+
+    def compute_rhoBrhoB(self, rhoB):
+        return self.contract_rhos(rhoB, rhoB)
+
+
+        
+    # def compute_rhoArhoB(self, rhoB: np.ndarray) -> np.complex128:
+
+    #     L = self.L
+
+    #     tensors = (self.rhoA, rhoB)
+    #     indices = [
+    #         [i for i in range(1, 2*L+1)],
+    #         [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
+    #     ]
+    #     rhoArhoB = ncon(tensors, indices)
+
+    #     return rhoArhoB
+    
+    # def compute_rhoArhoA(self) -> np.complex128:
+
+    #     rhoA, L = self.rhoA, self.L
+
+    #     tensors = (rhoA, rhoA)
+    #     indices = [
+    #         [i for i in range(1, 2*L+1)],
+    #         [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
+    #     ]
+    #     rhoArhoA = ncon(tensors, indices)
+
+    #     return rhoArhoA
+    
+    # def compute_rhoBrhoB(self, rhoB: np.ndarray) -> np.complex128:
+        
+    #     L = self.L
+    #     tensors = (rhoB, rhoB)
+    #     indices = [
+    #         [i for i in range(1, 2*L+1)],
+    #         [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
+    #     ]
+    #     res = ncon(tensors, indices)
+
+    #     return res
+    
+    def cost(self, B: UniformMps, rB: RightFixedPoint) -> np.complex128:
+        res = 0. + 0.j
+        rhoB = self.compute_rhoB(B, rB)
+        res += self.rhoArhoA
+        res += self.compute_rhoBrhoB(rhoB)
+        res -= 2*self.compute_rhoArhoB(rhoB)
+        return res
+    
+    def compute_drhoB(self, i: int, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
+
+        L = self.L
+        chain = B.to_mps_chain(self.L)
+        sub_chains = [B.to_mps_chain(i).conj(), B.to_mps_chain(L-i-1).conj()]
+
+        tensors = [chain, *sub_chains, np.eye(B.d), rB.tensor]
+        indices = [
+            [1] + [-i for i in range(1, L+1)] + [2],
+            [1] + [-i for i in range(L+1, L+1+i)] + [-2*L-1],
+            [-2*L-3] + [-i for i in range(L+2+i, 2*L+1)] + [3],
+            [-L-1-i, -2*L-2],
+            [2, 3]
+        ]
+        res = ncon(tensors, indices)
+
+        return res
+    
+    def compute_rho_open(self, MPS: UniformMps) -> npt.NDArray[np.complex128]:
+        L = self.L
+        chain = MPS.to_mps_chain(L)
+
+        ket_idx = [1] + [-(k) for k in range(1, L+1)]       + [-(2*L+1)]
+        bra_idx = [1] + [-(k) for k in range(L+1, 2*L+1)]   + [-(2*L+2)]
+
+        return ncon([chain, chain.conj()], [ket_idx, bra_idx])
+    
+
+    def contract_rho_open_with_rho(self, rho_open: npt.NDArray[np.complex128], rho_closed: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
+
+        L = self.L
+
+        # Match the 2L closed legs + 2 open virtual legs
+        open_idx = list(range(1, 2*L+1)) + [-1, -2]
+
+        # Closed ρ: same swap pattern as always
+        closed_idx = list(range(L+1, 2*L+1)) + list(range(1, L+1))
+
+        return ncon([rho_open, rho_closed], [open_idx, closed_idx])
+    
+    def compute_drhoBrhoAdrB(self, B: UniformMps) -> npt.NDArray[np.complex128]:
+        rho_open = self.compute_rho_open(B)
+        return self.contract_rho_open_with_rho(rho_open, self.rhoA)
+
+
+    def compute_drhoBrhoBdrB(self, rhoB: npt.NDArray[np.complex128], B: UniformMps) -> npt.NDArray[np.complex128]:
+
+        rho_open = self.compute_rho_open(B)
+        return self.contract_rho_open_with_rho(rho_open, rhoB)
+
+
+
+
+    # def compute_drhoBrhoBdrB(self, rhoB: np.ndarray, B: UniformMps) -> npt.NDArray[np.complex128]:
+
+    #     L = self.L
+    #     chain = B.to_mps_chain(L)
+
+    #     tensors = (chain, chain.conj())
+    #     indices = [
+    #         [1] + [-i for i in range(1, L+1)] + [-(2*L+1)],
+    #         [1] + [-i for i in range(L+1, 2*L+1)] + [-(2*L+2)]
+    #     ]
+    #     drhoBdrB = ncon(tensors, indices)
+
+    #     tensors = [drhoBdrB, rhoB]
+    #     indices = [
+    #         [i for i in range(1, 2*L+1)] + [-1, -2],
+    #         [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
+    #     ]
+    #     drhoBrhoBdrB = ncon(tensors, indices)
+
+    #     return drhoBrhoBdrB
+    
+    # def compute_drhoBrhoAdrB(self, B: UniformMps) -> npt.NDArray[np.complex128]:
+
+    #     rhoA, L = self.rhoA, self.L
+    #     chain = B.to_mps_chain(self.L)
+
+    #     tensors = (chain, chain.conj())
+    #     indices = [
+    #         [1] + [-i for i in range(1, L+1)] + [-(2*L+1)],
+    #         [1] + [-i for i in range(L+1, 2*L+1)] + [-(2*L+2)]
+    #     ]
+    #     drhoBdrB = ncon(tensors, indices)
+
+    #     tensors = [drhoBdrB, rhoA]
+    #     indices = [
+    #         [i for i in range(1, 2*L+1)] + [-1, -2],
+    #         [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)]
+    #     ]
+    #     drhoBrhoAdrB = ncon(tensors, indices)
+
+    #     return drhoBrhoAdrB
+
+    def derivative(self, B: UniformMps, rB: RightFixedPoint) -> npt.NDArray[np.complex128]:
+
+        L, rhoA = self.L, self.rhoA
+        rhoB = self.compute_rhoB(B, rB)
+        D = np.zeros_like(B.tensor)
+
+        # rho(A(t+dt))rho(B) contribution
+        tmp = np.zeros_like(B.tensor)
+        for i in range(L):
+            drhoB = self.compute_drhoB(i, B, rB)
+
+            tensors = [rhoA, drhoB]
+            indices = [
+                [i for i in range(1, 2*L+1)],
+                [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)] + [-1, -2, -3]
+            ]
+            tmp += ncon(tensors, indices)
+
+        D -= 2*tmp
+
+        # rho(B)^2 contribution
+        tmp = np.zeros_like(B.tensor)
+        for i in range(L):
+            drhoB = self.compute_drhoB(i, B, rB)
+
+            tensors = [rhoB, drhoB]
+            indices = [
+                [i for i in range(1, 2*L+1)],
+                [i for i in range(L+1, 2*L+1)] + [i for i in range(1, L+1)] + [-1, -2, -3]
+            ]
+            tmp += ncon(tensors, indices)
+ 
+        D += 2*tmp
+
+        drhoBrhoBdrB = self.compute_drhoBrhoBdrB(rhoB, B)
+        D += 2*rB.derivative(drhoBrhoBdrB.T)
+
+        drhoBrhoAdrB = self.compute_drhoBrhoAdrB(B)
+        D -= 2*rB.derivative(drhoBrhoAdrB.T)
+
+        return D
+
     
 if __name__ == "__main__":
     pass

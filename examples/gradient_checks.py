@@ -1,5 +1,10 @@
 from src.qdmt.evolve import *
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
+
+from qdmt.cost import NaiveEvolvedHilbertSchmidt_NoTimeEvolution as Naive_No_Time
+
+
 # from examples.analyze_first import load_data, count_initial_nonzero, spit_out_state
 from scipy.stats import unitary_group
 from scipy.linalg import expm
@@ -9,6 +14,18 @@ from datetime import datetime
 
 
 from examples.data_management import save_results, load_results
+
+
+
+def CostFn_Naive(A_target, model, L, trotterization_order):
+    return Naive(A_target, model, L, trotterization_order)
+
+def CostFn_Naive_No_Time(A_target, model, L, trotterization_order):
+    return Naive_No_Time(A_target, L)   # ignores trotterization_order
+
+
+# default: use the new version
+CostFn = CostFn_Naive_No_Time
 
 
 
@@ -42,7 +59,12 @@ def check_gradient(A0, A_target, L, iterations, tolerance, cut_off=10*60*60):
     max_iter=iterations
     tol=tolerance
 
-    f = EvolvedHilbertSchmidt(A_target, model, L, trotterization_order)
+    # f = EvolvedHilbertSchmidt(A_target, model, L, trotterization_order)
+
+    # f = Naive(A_target, model, L, trotterization_order)
+
+    f = CostFn(A_target, model, L, trotterization_order)
+
     gd = ConjugateGradient(f, M, A0, max_iter, tol=tol, verbose=True)
     A, c, n, _ = gd.optimize()
     print(A.is_isometry(1e-14))
@@ -51,7 +73,7 @@ def check_gradient(A0, A_target, L, iterations, tolerance, cut_off=10*60*60):
     print(c)
     return c
 
-
+    
 
 # d=2
 # D=4
@@ -263,19 +285,35 @@ tol = 1e-11
 d = 2
 
 
-# L=2
-# D_target=12
+
+C_as_function_of_D(d,10,np.arange(2,8),3,it,tol,20,False)
+C_as_function_of_D(d,34,np.arange(2,21),5,it,tol,20,False)
+
+
+# L=3
+# D_target=10
 # Drange=np.arange(2, 10)
-# C_as_function_of_D(d,D_target,Drange,L,it,tol,20,True)
+
+# start = time.perf_counter()
+
+# # CostFn = CostFn_Naive
+
+# test=C_as_function_of_D(d,D_target,Drange,L,it,tol,20,False)
+
+# end = time.perf_counter()
+# print(f"Time: {end - start:.6f} seconds")
+# plot_stats(stats_results(test))
+
 # done()
-L=4
-D_target=20
-Drange=np.arange(2, 13)
-C_as_function_of_D(d,D_target,Drange,L,it,tol,10,True)
-# testres=load_results("representability",f"D_target={D_target} L={L}")
+# L=4
+# D_target=20
+# Drange=np.arange(2, 13)
+# C_as_function_of_D(d,D_target,Drange,L,it,tol,10,True)
+
+# testres=load_results("representability","D_target=12 L=2 samples=20")
 # stats_results(testres)
 
 
-# print(testres)
+# # print(testres)
 
 # plot_stats(stats_results(testres))
