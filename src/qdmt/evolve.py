@@ -138,6 +138,7 @@ def evolve(A0: UniformMps,
     cost = np.empty_like(times)
     norm = np.empty_like(times)
     duration = np.empty_like(times)
+    maxiter = np.empty_like(times)
     state = np.empty((len(times), *A.tensor.shape), dtype=np.complex128)
     # print("do GM")
     M = Grassmann()
@@ -154,7 +155,9 @@ def evolve(A0: UniformMps,
         # print('start gd')    
         gd = ConjugateGradient(f, M, A, max_iter, tol=tol, verbose=True)
         
-        A, cost[i], norm[i], _ = gd.optimize()
+        A, cost[i], norm[i], hist = gd.optimize()
+        maxiter[i] = len(hist[0])-1
+
         time_at_end_of_step=time.time()
         # sys.exit()
         state[i] = A.tensor
@@ -171,7 +174,7 @@ def evolve(A0: UniformMps,
         print(f"\nEvolved the state to t={t}\n\n")
         # print(cost)
 
-    return times, state, cost, norm, duration
+    return times, state, cost, norm, duration, maxiter
 
 def parse(parser: argparse.ArgumentParser):
     parser.add_argument(

@@ -274,6 +274,43 @@ def plot_stats(stats,title):
     plt.show()
 
 
+def plot_multiple_stats(stats_list, labels, title="Average Cost vs D", subtitle=None):
+    """
+    stats_list : list of stats arrays [ [D, avg, var], ... ]
+    labels     : list of strings for legend
+    title      : main title
+    subtitle   : optional string that appears under the main title
+    """
+
+    plt.figure(figsize=(6,4))
+
+    # Collect integer D values across all stats
+    all_Ds = sorted({int(d) for stats in stats_list for d in np.array(stats)[:,0]})
+
+    # Plot each set
+    for stats, label in zip(stats_list, labels):
+        stats = np.array(stats)
+        Ds = stats[:, 0].astype(int)
+        avg = stats[:, 1]
+        plt.plot(Ds, avg, marker='o', label=label)
+
+    plt.xlabel("D")
+    plt.ylabel("Average c (log scale)")
+    plt.yscale("log")
+    plt.grid(True, which='both')
+    plt.xticks(all_Ds)
+
+    # Titles
+    plt.title(title)
+    if subtitle is not None:
+        # suptitle has its own vertical placement
+        plt.suptitle(subtitle, y=0.97, fontsize=10, color="gray")
+
+    plt.legend()
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave room for subtitle
+    plt.show()
+
+
 
 
 def done():
@@ -314,24 +351,35 @@ d = 2
 
 
 
-#### print and save this
-testres=load_results("representability","D_target=37 L=5 samples=2")
-stats_results(testres)
-plot_stats(stats_results(testres),"L=5, 2 samples, D'=37")
+# #### print and save this
+# testres=load_results("representability","D_target=37 L=5 samples=2")
+# stats_results(testres)
+# plot_stats(stats_results(testres),"L=5, 2 samples, D'=37")
 
 
-testres=load_results("representability","D_target=20 L=4 samples=10")
-stats_results(testres)
-plot_stats(stats_results(testres),"L=4, 10 samples, D'=20")
-
-
-
-testres=load_results("representability","D_target=10 L=3 samples=20")
-stats_results(testres)
-plot_stats(stats_results(testres),"L=3, 20 samples, D'=10")
+# testres=load_results("representability","D_target=20 L=4 samples=10")
+# stats_results(testres)
+# plot_stats(stats_results(testres),"L=4, 10 samples, D'=20")
 
 
 
-testres=load_results("representability","D_target=12 L=2 samples=20")
-stats_results(testres)
-plot_stats(stats_results(testres),"L=2, 20 samples, D'=12")
+# testres=load_results("representability","D_target=10 L=3 samples=20")
+# stats_results(testres)
+# plot_stats(stats_results(testres),"L=3, 20 samples, D'=10")
+
+
+
+# testres=load_results("representability","D_target=12 L=2 samples=20")
+# stats_results(testres)
+# plot_stats(stats_results(testres),"L=2, 20 samples, D'=12")
+
+
+# stats2 = stats_results(load_results("representability","D_target=12 L=2 samples=20"))
+# stats3 = stats_results(load_results("representability","D_target=10 L=3 samples=20"))
+# stats4 = stats_results(load_results("representability","D_target=20 L=4 samples=10"))
+# stats5 = stats_results(load_results("representability","D_target=37 L=5 samples=2"))
+
+# stats_list = [stats2, stats3, stats4, stats5]
+# labels = ["L=2", "L=3", "L=4", "L=5"]
+
+# plot_multiple_stats(stats_list, labels, title="Average Cost vs D",subtitle="D0(2)=3, D0(3)=6, D0(4)=11, D0(5)=20")

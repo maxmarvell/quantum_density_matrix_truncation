@@ -479,7 +479,7 @@ if __name__ == "__main__":
 
 
     left="energy"
-    right="renyi_entropy"
+    right="cost"
 
     plot_unfolded_twofields(
     (long_4, "D=4"),

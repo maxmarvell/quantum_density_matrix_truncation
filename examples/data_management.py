@@ -51,9 +51,13 @@ def load_results(foldername,filename):
 
 
 def filepath_gen(dt, steps, tolerance, iterations, D, cut_off):
-    filename = f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}_trimmed_unfolded.npz"
-    return RESULTS_DIR / "datasets_unfolded" / filename
+    filename = f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}"
+    return RESULTS_DIR  / filename
 
+
+# def filepath_gen(dt, steps, tolerance, iterations, D, cut_off):
+#     filename = f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}_trimmed_unfolded.npz"
+#     return RESULTS_DIR / "datasets_unfolded" / filename
 
 
 

@@ -7,8 +7,47 @@ import os
 
 
 
+from pathlib import Path
 
-def Execute_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int, cut_off: float, save = True, debug = False, A_init = None):
+def merge_temp_files(tmp_dir, output_file):
+    files = sorted(tmp_dir.glob("*chunk*.npz"))
+
+    all_times = []
+    all_states = []
+    all_costs = []
+    all_norms = []
+    all_durations = []
+    all_maxiters = []
+
+    for f in files:
+        data = np.load(f)
+        all_times.append(data["time"])
+        all_states.append(data["state"])
+        all_costs.append(data["cost"])
+        all_norms.append(data["gradient_norm"])
+        all_durations.append(data["duration"])
+        all_maxiters.append(data["maxiter"])
+
+    times = np.concatenate(all_times)
+    state = np.concatenate(all_states, axis=0)
+    cost = np.concatenate(all_costs)
+    norm = np.concatenate(all_norms)
+    duration = np.concatenate(all_durations)
+    maxiter = np.concatenate(all_maxiters)
+
+    
+    np.savez_compressed(
+        output_file,
+        time=times,
+        state=state,
+        gradient_norm=norm,
+        cost=cost,
+        duration=duration,
+        maxiter=maxiter
+    )
+
+
+def Execute_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int, cut_off: float, save = True, debug = False, A_init = None, save_after_steps = 50):
     if save == False:
         print("WARNING, NOT SAVING THE DATA!")
 
@@ -28,8 +67,11 @@ def Execute_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int
 
     print(str(filepath))
 
-    if debug == True:
-        filepath+="_debug"
+    if debug:
+        filepath = Path(str(filepath) + "_debug")
+
+
+        
 
     assert check_write_permission(filepath)
 
@@ -37,11 +79,40 @@ def Execute_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int
     model = TransverseFieldIsing(g=1.05, delta_t=dt, h=-0.5, J=-1)
 
     time_total = steps*dt
-    
-    times, state, cost, norm, duration = evolve(A_init, D, L, model, dt, time_total, iterations, tolerance, cut_off)
-    
-    if save:
-        np.savez_compressed(filepath,time=times, state=state, gradient_norm=norm, cost=cost, duration=duration)
+    time_chunk = save_after_steps*dt
+
+
+    tmp_dir = filepath.parent / ".tmp"
+    tmp_dir.mkdir(exist_ok=True)
+    print(tmp_dir)
+
+
+
+    start_times = np.arange(0, time_total, time_chunk)
+
+    chunk_id=0
+    for this_start in start_times:
+        max_t=this_start+time_chunk
+        times, state, cost, norm, duration, maxiter = evolve(A_init, D, L, model, dt, max_t, iterations, tolerance, cut_off,start_t=this_start)
+        # print(state)
+        # print(this_start)
+        A_init=UniformMps(state[-1])
+       
+        tmp_file = tmp_dir / (f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}"+f"_chunk{chunk_id}.npz")
+
+        chunk_id+=1
+        print(tmp_file)
+        np.savez_compressed(tmp_file ,time=times, state=state, gradient_norm=norm, cost=cost, duration=duration, maxiter=maxiter)
+        merge_temp_files(tmp_dir, filepath)
+
+  
+    # if save:
+    #     np.savez_compressed(filepath,time=times, state=state, gradient_norm=norm, cost=cost, duration=duration, maxiter=maxiter)
+
+
+
+
+
 
 
 def Resume_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int, cut_off_previous: float, cut_off_now: float):
@@ -96,36 +167,52 @@ if __name__ == "__main__":
 
     
 
-    steps = 100
-    # steps=100
-    cut_off= 1*60*60+4
-    # cut_off=60
+    # steps = 100
+    # # steps=100
+    # cut_off= 1*60*60+4
+    # # cut_off=60
 
-    delta_ts_ = [0.1*1e-2]
-    tolerances_ = [1e-10]
-    iterations_ = [1000]
-    Ds_ = [10]
+    # delta_ts_ = [0.1*1e-2]
+    # tolerances_ = [1e-10]
+    # iterations_ = [1000]
+    # Ds_ = [10]
     # iterations_ = [500]
     # Ds_ = [4,8]
     # delta_ts_=[1e-2]
     # tolerances_ = [1e-8]
 
+    dt = 1e-3
+    steps = int(20//dt)
+    tol =1e-11
+    iter=40000
+    Ddim = 12
 
+    hour = 3600
+    days = 24*hour
     
+    cut_off = 2*days
+
+    Execute_Run(dt, steps, tol, iter, Ddim, cut_off,True,False,save_after_steps=5)
+
+    data=load_data(dt, steps, tol, iter, Ddim, cut_off)
+    print(data["time"])
+    print(data["cost"])
+    print(data["maxiter"])
+    print(data["duration"])
 
 
-    # Run with timeout
-    for tolerance in tolerances_:
-        for iterations in iterations_:
-            for dt in delta_ts_:
-                for bondD in Ds_:
-                    # print(f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={bondD}_cut={cut_off}")
-                    # A_0 = spit_out_state(dt, steps, tolerance, iterations, bondD, cut_off, 0.79)
-                    # Execute_Run(dt, 1, 1e-10, 1000, bondD, cut_off,False,True,A_0)
+    # # Run with timeout
+    # for tolerance in tolerances_:
+    #     for iterations in iterations_:
+    #         for dt in delta_ts_:
+    #             for bondD in Ds_:
+    #                 # print(f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={bondD}_cut={cut_off}")
+    #                 # A_0 = spit_out_state(dt, steps, tolerance, iterations, bondD, cut_off, 0.79)
+    #                 # Execute_Run(dt, 1, 1e-10, 1000, bondD, cut_off,False,True,A_0)
                     
-                    # Execute_Run(dt, 100000, tolerance, 1000, 8, cut_off,True,False)
-                    # Execute_Run(dt, 100000, tolerance, 1000, 12, cut_off,True,False)
-                    Execute_Run(dt, 1, 1e-11, 10, 4, cut_off,True,True)
+    #                 # Execute_Run(dt, 100000, tolerance, 1000, 8, cut_off,True,False)
+    #                 # Execute_Run(dt, 100000, tolerance, 1000, 12, cut_off,True,False)
+    #                 Execute_Run(dt, 1, 1e-11, 10, 4, cut_off,True,True)
                     # A_0 = spit_out_state(dt, 1000, tolerance, 1000, 16, cut_off, 0.41)
                     # Execute_Run(dt, 100, tolerance, 1000, 16, cut_off,True,False)
 
