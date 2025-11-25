@@ -65,7 +65,7 @@ def check_gradient(A0, A_target, L, iterations, tolerance, cut_off=10*60*60):
 
     f = CostFn(A_target, model, L, trotterization_order)
 
-    gd = ConjugateGradient(f, M, A0, max_iter, tol=tol, verbose=True)
+    gd = ConjugateGradient(f, M, A0, max_iter, tol=tol, verbose=False)
     A, c, n, _ = gd.optimize()
     print(A.is_isometry(1e-14))
     print(A.tensor.shape)
@@ -244,7 +244,7 @@ def stats_results(results):
 
 
 
-def plot_stats(stats):
+def plot_stats(stats,title):
     """
     stats: array of shape (len(D_range), 3)
            columns = [D, average, variance]
@@ -260,7 +260,7 @@ def plot_stats(stats):
     plt.xlabel("D")
     plt.ylabel("Average c (log scale)")
     plt.yscale("log")
-    plt.title("Average vs D (log scale)")
+    plt.title("Average Cost vs D "+title)
     plt.grid(True, which='both')
     plt.show()
 
@@ -280,14 +280,16 @@ def done():
     print("Done at:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 
-it = 2000
-tol = 1e-11
+it = 40000
+tol = 1e-12
 d = 2
 
 
 
-C_as_function_of_D(d,10,np.arange(2,8),3,it,tol,20,False)
-C_as_function_of_D(d,34,np.arange(2,21),5,it,tol,20,False)
+# C_as_function_of_D(d,10,np.arange(2,8),3,it,tol,20,False)
+
+
+# C_as_function_of_D(d,37,np.arange(2,23)[::-1],5,it,tol,2,False)
 
 
 # L=3
@@ -310,10 +312,26 @@ C_as_function_of_D(d,34,np.arange(2,21),5,it,tol,20,False)
 # Drange=np.arange(2, 13)
 # C_as_function_of_D(d,D_target,Drange,L,it,tol,10,True)
 
-# testres=load_results("representability","D_target=12 L=2 samples=20")
-# stats_results(testres)
 
 
-# # print(testres)
+#### print and save this
+testres=load_results("representability","D_target=37 L=5 samples=2")
+stats_results(testres)
+plot_stats(stats_results(testres),"L=5, 2 samples, D'=37")
 
-# plot_stats(stats_results(testres))
+
+testres=load_results("representability","D_target=20 L=4 samples=10")
+stats_results(testres)
+plot_stats(stats_results(testres),"L=4, 10 samples, D'=20")
+
+
+
+testres=load_results("representability","D_target=10 L=3 samples=20")
+stats_results(testres)
+plot_stats(stats_results(testres),"L=3, 20 samples, D'=10")
+
+
+
+testres=load_results("representability","D_target=12 L=2 samples=20")
+stats_results(testres)
+plot_stats(stats_results(testres),"L=2, 20 samples, D'=12")
