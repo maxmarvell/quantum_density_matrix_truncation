@@ -328,8 +328,12 @@ def plot_unfolded_twofields(
                 print(f"Field '{field_left}' missing in dataset '{label}', skipping (left).")
                 continue
 
-            time = np.asarray(data["time"]).flatten()
+            # time = np.asarray(data["time"]).flatten()
+            # values = np.asarray(data[field_left]).flatten()
+            #  buggy time array needs fixing
             values = np.asarray(data[field_left]).flatten()
+            time = np.arange(len(values))
+
 
             if t_max is not None:
                 mask = time <= t_max
@@ -342,6 +346,7 @@ def plot_unfolded_twofields(
                 values,
                 color=color,
                 marker="o",
+                linestyle="",
                 markersize=3,
                 linewidth=1.5,
                 label=f"{label} – {field_left}",
@@ -358,8 +363,12 @@ def plot_unfolded_twofields(
                 print(f"Field '{field_right}' missing in dataset '{label}', skipping (right).")
                 continue
 
-            time = np.asarray(data["time"]).flatten()
+            # time = np.asarray(data["time"]).flatten()
+            # values = np.asarray(data[field_right]).flatten()
+            #  fix for buggy time array
             values = np.asarray(data[field_right]).flatten()
+            time = np.arange(len(values))
+
 
             if t_max is not None:
                 mask = time <= t_max
@@ -372,7 +381,7 @@ def plot_unfolded_twofields(
                 values,
                 color=color,
                 marker="x",
-                linestyle="--",
+                linestyle="",
                 markersize=3,
                 linewidth=1.5,
                 label=f"{label} – {field_right}",
@@ -422,6 +431,15 @@ def plot_unfolded_twofields(
 
     # ----- STYLE -----
     ax_left.grid(True, linewidth=0.5, linestyle="--", alpha=0.7)
+
+    print("DEBUG:", label)
+    print("time shape:", time.shape)
+    print("values shape:", values.shape)
+    print("first 5 times:", time[:5])
+    print("first 5 values:", values[:5])
+    print("last 5 times:", time[-5:])
+    print("last 5 values:", values[-5:])
+
 
     plt.show()
 

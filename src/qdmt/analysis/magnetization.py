@@ -4,15 +4,15 @@ from scipy.integrate import quad
 
 from qdmt.uniform_mps import UniformMps
 from qdmt.model import Pauli
-from qdmt.transfer_matrix import RightFixedPoint
+from qdmt.transfer_matrix import TransferMatrix
 
 def transverse_magnetization(A: UniformMps) -> np.float64:
-    r = RightFixedPoint.from_mps(A)
-    return np.real(ncon([A.tensor, Pauli.Sx,  A.conj, r.tensor], [[1, 2, 3], [2, 4], [1, 4, 5], [3, 5]]))
+    r = TransferMatrix.new(A, A).right_fixed_point()
+    return np.real(ncon([A.tensor, Pauli.Sx,  A.tensor.conj(), r.tensor], [[1, 2, 3], [2, 4], [1, 4, 5], [3, 5]]))
 
 def longitudinal_magnetization(A: UniformMps) -> np.float64:
-    r = RightFixedPoint.from_mps(A)
-    return np.real(ncon([A.tensor, Pauli.Sz,  A.conj, r.tensor], [[1, 2, 3], [2, 4], [1, 4, 5], [3, 5]]))
+    r = TransferMatrix.new(A, A).right_fixed_point()
+    return np.real(ncon([A.tensor, Pauli.Sz,  A.tensor.conj(), r.tensor], [[1, 2, 3], [2, 4], [1, 4, 5], [3, 5]]))
 
 def analytic(t, g0, g1):
     def theta(k, g):

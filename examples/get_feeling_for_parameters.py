@@ -3,49 +3,83 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from examples.data_management import *
 
 import os
+import matplotlib.pyplot as plt
 
 
 
 
 from pathlib import Path
 
-def merge_temp_files(tmp_dir, output_file):
-    files = sorted(tmp_dir.glob("*chunk*.npz"))
+import numpy as np
+import re
+from pathlib import Path
 
-    all_times = []
-    all_states = []
-    all_costs = []
-    all_norms = []
-    all_durations = []
-    all_maxiters = []
+def merge_temp_files(tmp_dir: Path, output_file: Path):
+    tmp_dir = Path(tmp_dir)
+
+    # --- Get all matching chunk files ---
+    files = list(tmp_dir.glob("chunk*.npz"))
+    if not files:
+        print("WARNING: No temporary files found in", tmp_dir)
+        return
+
+    # --- Numeric sorting: chunk0, chunk1, ..., chunk10 ---
+    def extract_chunk_number(path):
+        m = re.search(r"chunk(\d+)", path.stem)
+        return int(m.group(1)) if m else -1
+
+    files = sorted(files, key=extract_chunk_number)
+
+    # --- Collect everything ---
+    times_all = []
+    states_all = []
+    costs_all = []
+    norms_all = []
+    durations_all = []
+    maxiters_all = []
 
     for f in files:
-        data = np.load(f)
-        all_times.append(data["time"])
-        all_states.append(data["state"])
-        all_costs.append(data["cost"])
-        all_norms.append(data["gradient_norm"])
-        all_durations.append(data["duration"])
-        all_maxiters.append(data["maxiter"])
+        print("Reading:", f)
+        data = np.load(f, allow_pickle=True)
 
-    times = np.concatenate(all_times)
-    state = np.concatenate(all_states, axis=0)
-    cost = np.concatenate(all_costs)
-    norm = np.concatenate(all_norms)
-    duration = np.concatenate(all_durations)
-    maxiter = np.concatenate(all_maxiters)
+        times_all.append(np.asarray(data["time"]))
+        states_all.append(np.asarray(data["state"]))
+        costs_all.append(np.asarray(data["cost"]))
+        norms_all.append(np.asarray(data["gradient_norm"]))
+        durations_all.append(np.asarray(data["duration"]))
+        maxiters_all.append(np.asarray(data["maxiter"]))
 
-    
+    # --- Concatenate ---
+    times_all = np.concatenate(times_all)
+    states_all = np.concatenate(states_all, axis=0)
+    costs_all = np.concatenate(costs_all)
+    norms_all = np.concatenate(norms_all)
+    durations_all = np.concatenate(durations_all)
+    maxiters_all = np.concatenate(maxiters_all)
+
+    # --- Sort everything by time ---
+    idx = np.argsort(times_all)
+
+    times_sorted = times_all[idx]
+    states_sorted = states_all[idx]
+    costs_sorted = costs_all[idx]
+    norms_sorted = norms_all[idx]
+    durations_sorted = durations_all[idx]
+    maxiters_sorted = maxiters_all[idx]
+
+    # --- Save final merged file ---
     np.savez_compressed(
         output_file,
-        time=times,
-        state=state,
-        gradient_norm=norm,
-        cost=cost,
-        duration=duration,
-        maxiter=maxiter
+        time=times_sorted,
+        state=states_sorted,
+        cost=costs_sorted,
+        gradient_norm=norms_sorted,
+        duration=durations_sorted,
+        maxiter=maxiters_sorted
     )
 
+    print(f"✓ Successfully merged {len(files)} chunks → {output_file}")
+    print(f"✓ time range: {times_sorted[0]} → {times_sorted[-1]}")
 
 def Execute_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int, cut_off: float, save = True, debug = False, A_init = None, save_after_steps = 50):
     if save == False:
@@ -81,12 +115,12 @@ def Execute_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int
     time_total = steps*dt
     time_chunk = save_after_steps*dt
 
-
-    tmp_dir = filepath.parent / ".tmp"
+    # ------------------------------
+    # Create UNIQUE temp directory for this run
+    # ------------------------------
+    tmp_dir = filepath.parent / (".tmp_" + filepath.name)
     tmp_dir.mkdir(exist_ok=True)
-    print(tmp_dir)
-
-
+    print("Temporary directory:", tmp_dir)
 
     start_times = np.arange(0, time_total, time_chunk)
 
@@ -98,13 +132,29 @@ def Execute_Run(dt: float, steps: int, tolerance: float, iterations: int, D: int
         # print(this_start)
         A_init=UniformMps(state[-1])
        
-        tmp_file = tmp_dir / (f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}"+f"_chunk{chunk_id}.npz")
+       # Save chunk
+        chunk_file = tmp_dir / f"chunk{chunk_id}.npz"
+        print("Writing:", chunk_file)
 
-        chunk_id+=1
-        print(tmp_file)
-        np.savez_compressed(tmp_file ,time=times, state=state, gradient_norm=norm, cost=cost, duration=duration, maxiter=maxiter)
-        merge_temp_files(tmp_dir, filepath)
+        np.savez_compressed(
+            chunk_file,
+            time=times,
+            state=state,
+            cost=cost,
+            gradient_norm=norm,
+            duration=duration,
+            maxiter=maxiter
+        )
 
+        chunk_id += 1
+
+    # ------------------------------
+    # Merge all chunks AFTER the loop
+    # ------------------------------
+    print("Merging temporary files...")
+    merge_temp_files(tmp_dir, filepath)
+
+    print("✓ Finished run.")
   
     # if save:
     #     np.savez_compressed(filepath,time=times, state=state, gradient_norm=norm, cost=cost, duration=duration, maxiter=maxiter)
@@ -192,7 +242,7 @@ if __name__ == "__main__":
     
     cut_off = 2*days
 
-    Execute_Run(dt, steps, tol, iter, Ddim, cut_off,True,False,save_after_steps=5)
+    # Execute_Run(dt, steps, tol, iter, Ddim, cut_off,True,False,save_after_steps=5)
 
     data=load_data(dt, steps, tol, iter, Ddim, cut_off)
     print(data["time"])
@@ -200,6 +250,47 @@ if __name__ == "__main__":
     print(data["maxiter"])
     print(data["duration"])
 
+    
+
+    times = data["time"]
+    cost = data["cost"]
+    duration = data["duration"]
+    maxiter = data["maxiter"]
+
+    print(len(times), len(cost), len(duration), len(maxiter))
+    print(times[:20])
+
+    time_arr = np.array(times)
+    cost_arr = np.array(cost)
+
+    plt.figure()
+    # plt.plot(cost)
+    plt.plot(duration)
+    # plt.plot(maxiter)
+    plt.xlabel("index")
+    plt.ylabel("cost")
+    plt.title("cost vs index")
+    plt.tight_layout()
+    plt.show()
+
+    sys.exit()
+
+    print("time_arr.shape:", time_arr.shape)
+    print("cost_arr.shape:", cost_arr.shape)
+    print("first element of time:", time_arr[0])
+    print("first element of cost:", cost_arr[0])
+    # plt.figure(figsize=(10,6))
+
+    plt.plot(times, cost, label="cost")
+    # plt.plot(time, duration, label="duration")
+    # plt.plot(time, maxiter, label="maxiter")
+
+    plt.xlabel("time")
+    plt.ylabel("value")
+    plt.title("Cost, Duration, Maxiter over Time")
+    plt.legend()
+    # plt.tight_layout()
+    plt.show()
 
     # # Run with timeout
     # for tolerance in tolerances_:

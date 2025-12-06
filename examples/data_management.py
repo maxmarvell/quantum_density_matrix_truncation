@@ -5,6 +5,7 @@ from qdmt.analysis import conserved_quantities as cq
 from src.qdmt.uniform_mps import UniformMps
 from qdmt.analysis import magnetization as mag
 
+
 from src.qdmt.evolve import *
 
 
@@ -49,6 +50,9 @@ def load_results(foldername,filename):
 
 
 
+def filename_gen(dt, steps, tolerance, iterations, D, cut_off):
+    filename = f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}"
+    return filename
 
 def filepath_gen(dt, steps, tolerance, iterations, D, cut_off):
     filename = f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}"
@@ -61,7 +65,7 @@ def filepath_gen(dt, steps, tolerance, iterations, D, cut_off):
 
 
 
-def load_data(dt, steps, tolerance, iterations, D, cut_off):
+def load_data(dt, steps, tolerance, iterations, D, cut_off, dir = None):
     # Build the filename
     filename = (
         f"benchmark_dt={dt}_steps={steps}_tol={tolerance}"
@@ -69,8 +73,12 @@ def load_data(dt, steps, tolerance, iterations, D, cut_off):
     )
 
     # Full absolute path to the .npz file
-    filepath = RESULTS_DIR / filename
+    if dir is not None:
+        filepath = RESULTS_DIR / dir /filename
+    else:        
+        filepath = RESULTS_DIR / filename
 
+    print(filepath)
     # Load and return the data
     return np.load(filepath)
 
@@ -185,6 +193,53 @@ def load_trimmed_data(dt, steps, tolerance, iterations, D, cut_off):
         "duration": data["duration"]
     }
 
+
+
+
+def sort_and_save_dataset(data_trimmed, original_filepath):
+    """
+    Sorts the dataset by ascending time and saves corrected data
+    under the same filename inside a new 'sorted' directory.
+    
+    Required data fields:
+        "time", "state", "maxiter", "gradient_norm", "cost", "duration"
+    """
+
+    # Convert to numpy arrays and extract time
+    time = np.asarray(data_trimmed["time"])
+    idx = np.argsort(time)   # sorting index
+
+    # Sort all fields with the same index
+    fields = ["time", "state", "maxiter", "gradient_norm", "cost", "duration"]
+    sorted_data = {}
+
+    for field in fields:
+        arr = np.asarray(data_trimmed[field])
+        sorted_data[field] = arr[idx]
+
+    # Prepare output directory
+    original_filepath = Path(original_filepath)
+    sorted_dir = original_filepath.parent / "sorted"
+    sorted_dir.mkdir(exist_ok=True)
+
+    # Output path: same filename inside "sorted"
+    output_path = sorted_dir / original_filepath.name
+
+    # Save sorted dataset
+    np.savez_compressed(
+        output_path,
+        time        = sorted_data["time"],
+        state       = sorted_data["state"],
+        maxiter     = sorted_data["maxiter"],
+        gradient_norm = sorted_data["gradient_norm"],
+        cost        = sorted_data["cost"],
+        duration    = sorted_data["duration"],
+    )
+
+    print(f"✓ Sorted dataset saved to: {output_path}")
+    return sorted_data, output_path
+
+
 def unfold_data(
     data_trimmed,
     dt,
@@ -207,9 +262,32 @@ def unfold_data(
 
     state = data_trimmed["state"]
     cost = data_trimmed["cost"]
+    # print(state[-1])
+    # print("test")
+    # print(state[19999])
+    # print(len(state))
+
 
     # --- Derived quantities ---
     model_H = TransverseFieldIsing(g=g, delta_t=0.1, h=h, J=J)
+
+
+    print("compute trace distance to rho_(tmax)")
+    last_A=state[-1]
+    dist_steady = np.array([tools.trace_distance_mps(UniformMps(x), UniformMps(last_A), L) for x in state])
+
+
+    print("compute von neumann")
+    von_neumann_entropy = np.array([tools.compute_von_neumann_entropy(UniformMps(x), L) for x in state])
+
+
+    print("compute transversal magnetization")
+    t_magnetization = np.array([mag.transverse_magnetization(UniformMps(x)) for x in state])
+    print(f"transversal magnetization {t_magnetization}")
+
+    print("compute longitudinal magnetization")
+    l_magnetization = np.array([mag.longitudinal_magnetization(UniformMps(x)) for x in state])
+    print(f"longitudinal magnetization {l_magnetization}")
 
     print("compute norm")
     norm = np.array([cq.compute_norm(UniformMps(x)) for x in state])
@@ -220,16 +298,19 @@ def unfold_data(
     print("compute renyi")
     renyi_entropy = np.array([tools.compute_second_Reyni(UniformMps(x), L) for x in state])
 
+    print("compute von neumann")
+    von_neumann_entropy = np.array([tools.compute_von_neumann_entropy(UniformMps(x), L) for x in state])
+
     print("compute log cost")
     log_cost = np.log(cost)
 
-    # print("compute magnetization")
-    # t_magnetization = np.array([mag.transverse_magnetization(UniformMps(x)) for x in state])
+    
 
     # --- Build extended dict ---
     data_unfolded = {
         "time": data_trimmed["time"],
         "state": data_trimmed["state"],
+        "maxiter": data_trimmed["maxiter"],
         "gradient_norm": data_trimmed["gradient_norm"],
         "cost": data_trimmed["cost"],
         "duration": data_trimmed["duration"],
@@ -237,7 +318,10 @@ def unfold_data(
         "energy": energy,
         "renyi_entropy": renyi_entropy,
         "log_cost": log_cost,
-        # "t_magnetization": t_magnetization
+        "t_magnetization": t_magnetization,
+        "l_magnetization": l_magnetization,
+        "von_neumann_entropy": von_neumann_entropy,
+        "dist_steady": dist_steady
     }
 
     # --- Save path construction ---
@@ -250,11 +334,12 @@ def unfold_data(
     unfolded_folder.mkdir(parents=True, exist_ok=True)
 
     # Add suffix "_trimmed_unfolded"
-    base_name = original_path.stem
-    unfolded_name = base_name + "_trimmed_unfolded.npz"
+    # base_name = original_path.stem
+    unfolded_name = filename_gen(dt, steps, tolerance, iterations, D, cut_off) + "_trimmed_unfolded.npz"
 
+    print(unfolded_name)
     save_path = unfolded_folder / unfolded_name
-
+    print(save_path)
     # Skip if exists
     if save_path.exists() and not overwrite:
         print(f"Unfolded dataset already exists: {save_path}")
@@ -276,14 +361,13 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
     Returns a dict or None if file not found.
     """
 
-    original_path = filepath_gen(dt, steps, tolerance, iterations, D, cut_off)
+    # original_path = filepath_gen(dt, steps, tolerance, iterations, D, cut_off)
 
     # Correct folder
     unfolded_folder = RESULTS_DIR / "datasets_unfolded"
 
     # Avoid double suffix
-    base = original_path.stem.replace("_trimmed_unfolded", "")
-    unfolded_name = base + "_trimmed_unfolded.npz"
+    unfolded_name = filename_gen(dt, steps, tolerance, iterations, D, cut_off) + "_trimmed_unfolded.npz"
 
     load_path = unfolded_folder / unfolded_name
 
@@ -300,13 +384,91 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
         "state": data["state"],
         "gradient_norm": data["gradient_norm"],
         "cost": data["cost"],
+        "maxiter": data["maxiter"],
         "duration": data["duration"],
         "norm": data["norm"],
         "energy": data["energy"],
         "renyi_entropy": data["renyi_entropy"],
         "log_cost": data["log_cost"],
+        "t_magnetization": data["t_magnetization"],
+        "l_magnetization": data["l_magnetization"],
+        "von_neumann_entropy": data["von_neumann_entropy"],
+        "dist_steady": data["dist_steady"],
+        "trace_distance_to_avg": data["trace_distance_to_avg"],
+        "trace_distance_dt": data["trace_distance_dt"]
+
     }
 
+def extend_unfolded_data(
+    dt,
+    steps,
+    tolerance,
+    iterations,
+    D,
+    cut_off,
+    new_key,
+    compute_fn=None,
+    trajectory_fn=None,
+    overwrite=False
+):
+    """
+    Extend an existing unfolded dataset by computing a new observable.
+
+    You may provide EITHER:
+        compute_fn(mps)        – applied to each UniformMps
+    OR:
+        trajectory_fn(states)  – applied once to the full list of states
+
+    Parameters
+    ----------
+    new_key : str
+        Name of the new observable to store.
+    compute_fn : function(UniformMps -> float/array)
+        Local-in-time observable.
+    trajectory_fn : function(list_of_states -> array)
+        Trajectory-level observable.
+    """
+
+    # ---------- Safety checks ----------
+    if (compute_fn is None) == (trajectory_fn is None):
+        raise ValueError("Provide exactly one of compute_fn or trajectory_fn.")
+
+    # ---------- Load dataset ----------
+    data = load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off)
+    if data is None:
+        raise FileNotFoundError("Unfolded dataset missing; run unfold_data() first.")
+
+    if new_key in data and not overwrite:
+        print(f"Key '{new_key}' already exists. Skipping (overwrite=False).")
+        return data
+
+    states = data["state"]
+
+    # ---------- Compute new observable ----------
+    if trajectory_fn is not None:
+        print(f"Computing trajectory-level observable '{new_key}' ...")
+        new_values = trajectory_fn(states)
+
+    else:
+        print(f"Computing per-MPS observable '{new_key}' ...")
+        new_values = []
+        for A in states:
+            mps = UniformMps(A)
+            new_values.append(compute_fn(mps))
+        new_values = np.array(new_values)
+
+    # ---------- Store result ----------
+    data[new_key] = new_values
+
+    # ---------- Save updated file ----------
+    unfolded_folder = RESULTS_DIR / "datasets_unfolded"
+    unfolded_name = filename_gen(dt, steps, tolerance, iterations, D, cut_off) + "_trimmed_unfolded.npz"
+    save_path = unfolded_folder / unfolded_name
+
+    np.savez_compressed(save_path, **data)
+    print(f"Saved updated dataset to {save_path}")
+
+    return data
 
 
 def generate_trimmed_and_unfolded(
