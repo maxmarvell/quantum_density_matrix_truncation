@@ -8,6 +8,13 @@ from pathlib import Path
 import sys
 
 
+
+###### desired data sets
+# D=16 non integrable
+# integrable:  L=4, D=2,4,8,12,16 
+# smaller dt 
+# ground state of the TFIM for g0 = 1.5 and a quench TFIM parametrised by g1 = 0.2
+
 hour = 3600
 days = 24*hour
 
@@ -28,6 +35,61 @@ cut_off = 2*days
 # D12_high_precision_sorted=load_data(dt, steps, tol, iter, Ddim, cut_off, dir="sorted")
 # D12_high_precision_=unfold_data(D12_high_precision_sorted,dt,steps,tolerance=tol,iterations=iter,D=12,cut_off=cut_off, overwrite=True)
 
+D12_high_precision_=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
+
+# === Dataset 2 ===
+#  integrable test
+
+# dt = 1e-3
+# steps = int(0.2//dt)
+# tol =1e-11
+# iter=10000
+# Ddim = 12
+
+
+# cut_off = hour
+# g=-1.5
+# h=0
+# J=-1 
+# L=4
+
+
+# testdat=load_data(dt, steps, tol, iter, Ddim, cut_off, dir = "integrable_test")
+
+
+# unfold_data(testdat,
+#     dt,
+#     steps,
+#     tol,
+#     iter,
+#     Ddim,
+#     cut_off,
+#     overwrite=False,
+#     L=L,
+#     g=g,
+#     h=h,
+#     J=J,
+#     dir = "integrable_test"
+# )
+
+#  integrable
+
+# testdat=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
+
+# left="energy"
+# right="renyi_entropy"
+
+
+# plot_unfolded_twofields(
+# (testdat, "D=12"),
+# field_left=left,
+# field_right=right,
+# title=left+" and "+right
+# )
+
+# sys.exit()
+
+# integrable over
 
 # plot_cost_vs_index(D12_high_precision_sorted)
 
@@ -57,7 +119,7 @@ cut_off = 2*days
 # )
 
 
-D12_high_precision_=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
+# 
 # data_trimmed=D12_high_precision_raw
 # load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
 
@@ -80,9 +142,10 @@ if __name__ == "__main__":
     # left="l_magnetization"
 
     # right="renyi_entropy"
-    # right="von_neumann_entropy"
+    right="von_neumann_entropy"
     # right="energy"
-    right="trace_distance_dt"
+    # right="trace_distance_dt"
+    # right="dist_steady"
 
     plot_unfolded_twofields(
     (D12_high_precision_, "D=12"),

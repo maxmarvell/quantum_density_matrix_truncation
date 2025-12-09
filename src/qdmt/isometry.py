@@ -36,7 +36,7 @@ class Isometry:
         I = self.V.conj().T @ self.V
         diff = I - np.eye(self.n, dtype=self.V.dtype)
         dist = np.linalg.norm(diff)   # Frobenius norm by default
-        print(f"‖V†V − I‖ = {dist:.3e}")
+        # print(f"‖V†V − I‖ = {dist:.3e}")
         return np.allclose(I, np.eye(self.n, dtype=self.V.dtype), atol=t, rtol=0)
     
     def adjoint(self) -> "Isometry":

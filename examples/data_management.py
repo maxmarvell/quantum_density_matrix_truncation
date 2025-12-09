@@ -54,9 +54,14 @@ def filename_gen(dt, steps, tolerance, iterations, D, cut_off):
     filename = f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}"
     return filename
 
-def filepath_gen(dt, steps, tolerance, iterations, D, cut_off):
+def filepath_gen(dt, steps, tolerance, iterations, D, cut_off,run_folder=None):
     filename = f"benchmark_dt={dt}_steps={steps}_tol={tolerance}_it={iterations}_D={D}_cut={cut_off}"
-    return RESULTS_DIR  / filename
+    if run_folder is None:
+        return RESULTS_DIR / filename
+    
+    # ensure folder exists
+    run_folder = Path(run_folder)
+    return RESULTS_DIR / run_folder / filename
 
 
 # def filepath_gen(dt, steps, tolerance, iterations, D, cut_off):
@@ -252,7 +257,8 @@ def unfold_data(
     L=4,
     g=1.05,
     h=-0.5,
-    J=-1
+    J=-1,
+    dir = None
 ):
     """
     Take trimmed data (dict) and compute derived quantities:
@@ -329,8 +335,11 @@ def unfold_data(
     # Base path for the original dataset (Path object)
     original_path = filepath_gen(dt, steps, tolerance, iterations, D, cut_off)
 
-    # Save folder: qdmt/results/datasets_unfolded
-    unfolded_folder = RESULTS_DIR / "datasets_unfolded"
+    # Save folder: qdmt/results/dir/datasets_unfolded
+    if dir is not None:
+        unfolded_folder = RESULTS_DIR / dir / "datasets_unfolded"
+    else:
+        unfolded_folder = RESULTS_DIR / "datasets_unfolded"
     unfolded_folder.mkdir(parents=True, exist_ok=True)
 
     # Add suffix "_trimmed_unfolded"
@@ -355,7 +364,7 @@ def unfold_data(
 
     return data_unfolded
 
-def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05, h=-0.5, J=-1):
+def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05, h=-0.5, J=-1, dir =None):
     """
     Load unfolded data saved in results/datasets_unfolded/.
     Returns a dict or None if file not found.
@@ -364,7 +373,11 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
     # original_path = filepath_gen(dt, steps, tolerance, iterations, D, cut_off)
 
     # Correct folder
-    unfolded_folder = RESULTS_DIR / "datasets_unfolded"
+
+    if dir is not None:
+        unfolded_folder = RESULTS_DIR / dir/ "datasets_unfolded"
+    else:
+        unfolded_folder = RESULTS_DIR / "datasets_unfolded"
 
     # Avoid double suffix
     unfolded_name = filename_gen(dt, steps, tolerance, iterations, D, cut_off) + "_trimmed_unfolded.npz"

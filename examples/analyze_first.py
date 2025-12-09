@@ -433,7 +433,7 @@ def plot_unfolded_twofields(
     ax_left.grid(True, linewidth=0.5, linestyle="--", alpha=0.7)
 
     print("DEBUG:", label)
-    print("time shape:", time.shape)
+    # print("time shape:", time.shape)
     print("values shape:", values.shape)
     print("first 5 times:", time[:5])
     print("first 5 values:", values[:5])

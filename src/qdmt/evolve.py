@@ -114,6 +114,7 @@ def evolve(A0: UniformMps,
     #  timing 
     start_time = time.time()
 
+    print(model)
 
     d = A0.d
     if A0.D == D:
