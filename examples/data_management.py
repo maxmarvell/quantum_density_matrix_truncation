@@ -407,8 +407,8 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
         "l_magnetization": data["l_magnetization"],
         "von_neumann_entropy": data["von_neumann_entropy"],
         "dist_steady": data["dist_steady"],
-        "trace_distance_to_avg": data["trace_distance_to_avg"],
-        "trace_distance_dt": data["trace_distance_dt"]
+        # "trace_distance_to_avg": data["trace_distance_to_avg"],
+        # "trace_distance_dt": data["trace_distance_dt"]
 
     }
 

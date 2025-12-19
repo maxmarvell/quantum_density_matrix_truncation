@@ -21,37 +21,37 @@ days = 24*hour
 
 # === Dataset 1 ===
 
-dt = 1e-3
-steps = int(20//dt)
-tol =1e-11
-iter=40000
-Ddim = 12
-cut_off = 2*days
-# D12_high_precision_raw=load_data(dt, steps, tol, iter, Ddim, cut_off)
+# dt = 1e-3
+# steps = int(20//dt)
+# tol =1e-11
+# iter=40000
+# Ddim = 12
+# cut_off = 2*days
+# # D12_high_precision_raw=load_data(dt, steps, tol, iter, Ddim, cut_off)
 
 
-# data_sorted, outpath = sort_and_save_dataset(D12_high_precision_raw, filepath)
+# # data_sorted, outpath = sort_and_save_dataset(D12_high_precision_raw, filepath)
 
-# D12_high_precision_sorted=load_data(dt, steps, tol, iter, Ddim, cut_off, dir="sorted")
-# D12_high_precision_=unfold_data(D12_high_precision_sorted,dt,steps,tolerance=tol,iterations=iter,D=12,cut_off=cut_off, overwrite=True)
+# # D12_high_precision_sorted=load_data(dt, steps, tol, iter, Ddim, cut_off, dir="sorted")
+# # D12_high_precision_=unfold_data(D12_high_precision_sorted,dt,steps,tolerance=tol,iterations=iter,D=12,cut_off=cut_off, overwrite=True)
 
-D12_high_precision_=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
+# D12_high_precision_=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
 
 # === Dataset 2 ===
 #  integrable test
 
-# dt = 1e-3
-# steps = int(0.2//dt)
-# tol =1e-11
-# iter=10000
-# Ddim = 12
+dt = 1e-3
+steps = int(20//dt)
+tol =1e-9
+iter=10000
+Ddim = 12
 
 
-# cut_off = hour
-# g=-1.5
-# h=0
-# J=-1 
-# L=4
+cut_off = 2*days
+g=-0.2
+h=0
+J=-1 
+L=4
 
 
 # testdat=load_data(dt, steps, tol, iter, Ddim, cut_off, dir = "integrable_test")
@@ -74,20 +74,38 @@ D12_high_precision_=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
 
 #  integrable
 
-# testdat=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
 
-# left="energy"
-# right="renyi_entropy"
-
-
-# plot_unfolded_twofields(
-# (testdat, "D=12"),
-# field_left=left,
-# field_right=right,
-# title=left+" and "+right
+# testdat=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/merged_temp_imports.npz")
+# unfold_data(testdat,
+#     dt,
+#     steps,
+#     tol,
+#     iter,
+#     Ddim,
+#     cut_off,
+#     overwrite=False,
+#     L=L,
+#     g=g,
+#     h=h,
+#     J=J,
+#     dir = "integrable_test"
 # )
 
-# sys.exit()
+testdat=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
+
+
+left="energy"
+right="t_magnetization"
+
+
+plot_unfolded_twofields(
+(testdat, "D=12"),
+field_left=left,
+field_right=right,
+title=left+" and "+right
+)
+
+sys.exit()
 
 # integrable over
 
