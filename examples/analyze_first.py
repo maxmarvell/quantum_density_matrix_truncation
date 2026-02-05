@@ -433,7 +433,7 @@ def plot_unfolded_twofields(
     ax_left.grid(True, linewidth=0.5, linestyle="--", alpha=0.7)
 
     print("DEBUG:", label)
-    # print("time shape:", time.shape)
+    print("time shape:", time.shape)
     print("values shape:", values.shape)
     print("first 5 times:", time[:5])
     print("first 5 values:", values[:5])
@@ -442,6 +442,37 @@ def plot_unfolded_twofields(
 
 
     plt.show()
+
+
+def plot_over_time(*pairs, dt=1.0, t0=0.0, t_max=None, xlabel="Time", title=None, figsize=(10,6)):
+    """
+    pairs: (data, field) OR (data, field, label) ...
+    data is dict-like: data[field] -> array
+    time is built as t = t0 + dt*np.arange(len(values)) (your "buggy time" fix)
+    """
+    plt.figure(figsize=figsize)
+    for p in pairs:
+        data, field = p[0], p[1]
+        label = p[2] if len(p) > 2 else f"{field}"
+        if data is None or field not in data:
+            print(f"skip: {label} (missing data/field)")
+            continue
+
+        y = np.asarray(data[field]).flatten()
+        t = t0 + dt * np.arange(len(y))
+
+        if t_max is not None:
+            m = t <= t_max
+            t, y = t[m], y[m]
+
+        plt.plot(t, y, marker="o", linestyle="", markersize=3, label=label)
+
+    plt.xlabel(xlabel)
+    if title: plt.title(title)
+    plt.grid(True, linewidth=0.5, linestyle="--", alpha=0.7)
+    plt.legend()
+    plt.show()
+
 
 
 if __name__ == "__main__":
@@ -462,7 +493,7 @@ if __name__ == "__main__":
     # testdat2=load_trimmed_data(0.01,10000,1e-10,1000,4,50403)
     # unfold_data(testdat2,0.01,10000,1e-10,1000,4,50403,True)
 
-    long_4=load_unfolded_data(0.01,10000,1e-10,1000,4,50403)
+    long_4=load_unfolded_data_old(0.01,10000,1e-10,1000,4,50403)
 
     # for D in [8,12,16]:
     #     print(D)
@@ -470,22 +501,22 @@ if __name__ == "__main__":
 
     # sys.exit()    
 
-    long_8=load_unfolded_data(0.01,100000,1e-10,1000,8,50403)
-    long_12=load_unfolded_data(0.01,100000,1e-10,1000,12,50403)
-    long_16=load_unfolded_data(0.01,100000,1e-10,1000,16,50403)
+    long_8=load_unfolded_data_old(0.01,100000,1e-10,1000,8,50403)
+    long_12=load_unfolded_data_old(0.01,100000,1e-10,1000,12,50403)
+    long_16=load_unfolded_data_old(0.01,100000,1e-10,1000,16,50403)
 
     # generate_trimmed_and_unfolded(0.005,1000,1e-10,3000,16,50404,True)
-    fine_16_dt05_it3=load_unfolded_data(0.005,1000,1e-10,3000,16,50404)
+    fine_16_dt05_it3=load_unfolded_data_old(0.005,1000,1e-10,3000,16,50404)
 
     # generate_trimmed_and_unfolded(0.005,1000,1e-10,2000,16,50404,True)
-    fine_16_dt05_it2=load_unfolded_data(0.005,1000,1e-10,2000,16,50404)
+    fine_16_dt05_it2=load_unfolded_data_old(0.005,1000,1e-10,2000,16,50404)
 
     # generate_trimmed_and_unfolded(0.001,1000,1e-11,1000,16,3604,True,timerange=0.1)
-    fine_16_dt_001_tol=load_unfolded_data(0.001,1000,1e-11,1000,16,3604)
+    fine_16_dt_001_tol=load_unfolded_data_old(0.001,1000,1e-11,1000,16,3604)
 
 
     # generate_trimmed_and_unfolded(0.005,200,1e-10,1000,4,50403,True)
-    fine_16_dt_05_it1=load_unfolded_data(0.005,200,1e-10,1000,4,50403)
+    fine_16_dt_05_it1=load_unfolded_data_old(0.005,200,1e-10,1000,4,50403)
 
 
 

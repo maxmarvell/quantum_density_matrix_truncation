@@ -189,6 +189,50 @@ class ConjugateGradient(AbstractOptimizer):
         if beta < eta and self.verbose:
             print("Warning: Resorting to default eta")
         return max(beta, eta)
+    
+
+    def _is_plateau(self, cost_hist, grad_hist, *, tol,
+                window=100,
+                stall_ratio=0.97,
+                grad_mult=10.0,
+                f_rtol=1e-6,
+                f_atol=0.0):
+        """
+        Robust plateau detector using medians.
+        Returns (bool, reason_str).
+        """
+        n = min(len(cost_hist), len(grad_hist))
+        if n < window:
+            return False, ""
+
+        f = np.asarray(cost_hist[-window:], dtype=np.complex128)
+        g = np.asarray(grad_hist[-window:], dtype=float)
+
+        if not (np.isfinite(g).all() and np.isfinite(np.real(f)).all() and np.isfinite(np.imag(f)).all()):
+            return False, ""
+
+        # Only allow plateau-stop once we're already in low-gradient regime
+        g_med = float(np.median(g))
+        if g_med > grad_mult * float(tol):
+            return False, ""
+
+        half = window // 2
+        g1 = float(np.median(g[:half]))
+        g2 = float(np.median(g[half:]))
+
+        # If gradient is still trending down materially, don't stop.
+        if g2 < stall_ratio * g1:
+            return False, ""
+
+        f_real = np.real(f)
+        f_start = float(f_real[0])
+        f_end = float(f_real[-1])
+        scale = max(abs(f_start), abs(f_end), 1.0)
+
+        # Require negligible objective improvement over the window
+        if abs(f_end - f_start) <= (f_atol + f_rtol * scale):
+            return True, f"plateau: med‖g‖={g_med:.2e}, g2/g1={g2/max(g1,1e-300):.3f}, Δf={f_end-f_start:.2e} over {window}"
+        return False, ""
 
     def optimize(self):
 
@@ -207,6 +251,22 @@ class ConjugateGradient(AbstractOptimizer):
         norm_grad = np.sqrt(inner(G, G))
         grad_history = [norm_grad]
 
+
+
+
+        # --- Plateau stopping settings (safe defaults) ---
+        plateau_stop = True
+        plateau_window = 100
+        plateau_check_every = 10
+        plateau_patience = 2
+        plateau_hits = 0
+
+        plateau_stall_ratio = 0.97
+        plateau_grad_mult = 10.0
+        plateau_f_rtol = 1e-6
+        plateau_f_atol = 0.0
+
+
         if self.precondtion:
             G_tilde = preconditioning(G, self.rB0.tensor)
         else:
@@ -220,6 +280,8 @@ class ConjugateGradient(AbstractOptimizer):
         # --- Main optimization loop ---
         iter = 0
         flag = False
+        stop_reason = None  # "tol", "plateau", "max_iter", "time", "tiny_cost"
+
         while True:
             # print(iter)
             if self.precondtion:
@@ -291,8 +353,48 @@ class ConjugateGradient(AbstractOptimizer):
             norm_grad = np.sqrt(inner(G, G))
             grad_history.append(norm_grad)
 
-            if norm_grad <= self.tol or iter >= self.max_iter or np.abs(C)<=2*1e-16:
+
+                        # --- Plateau early-stop ---
+            if plateau_stop and (iter % plateau_check_every == 0):
+                is_plat, reason = self._is_plateau(
+                    cost_history, grad_history,
+                    tol=self.tol,
+                    window=plateau_window,
+                    stall_ratio=plateau_stall_ratio,
+                    grad_mult=plateau_grad_mult,
+                    f_rtol=plateau_f_rtol,
+                    f_atol=plateau_f_atol,
+                )
+                if is_plat:
+                    plateau_hits += 1
+                    if self.verbose:
+                        print(f"CG: plateau hit {plateau_hits}/{plateau_patience}: {reason}")
+                    if plateau_hits >= plateau_patience:
+                        stop_reason = "plateau"
+
+                        if self.verbose:
+                            print(f"CG: early stop due to plateau at iter {iter}")
+                        break
+                else:
+                    plateau_hits = 0
+
+
+            if norm_grad <= self.tol: 
+                stop_reason = "tol"
                 break
+
+
+
+            if iter >= self.max_iter:
+                stop_reason = "max_iter"
+                break
+
+
+            if np.abs(C) <= 2e-16:
+                stop_reason = "tiny_cost"
+                break
+    
+                
 
             if self.verbose == True and iter % 10 == 0:
                 print(f"CG: iter {iter:4d}: f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}, α = {alpha:.2e}, β = {beta:.2e}")
@@ -306,10 +408,31 @@ class ConjugateGradient(AbstractOptimizer):
             X_prev = self.M.transport(X_prev, W_prev, X_prev, alpha, W)  
             # print("loop done")    
 
-        print(f"\nCG: Converged! iter {iter:4d}: f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}, α = {alpha:.2e}, β = {beta:.2e}")
+        # print(f"\nCG: Converged! iter {iter:4d}: f = {C:.8e}, ‖∇f‖ = {norm_grad:.4e}, α = {alpha:.2e}, β = {beta:.2e}")
+
+        if stop_reason == "tol":
+            status = "CONVERGED (‖∇f‖ ≤ tol)"
+        elif stop_reason == "plateau":
+            status = "STOPPED (plateau detected)"
+        elif stop_reason == "max_iter":
+            status = "STOPPED (max_iter reached)"
+        elif stop_reason == "tiny_cost":
+            status = "STOPPED (|f| ≈ 0)"
+        else:
+            status = "STOPPED (unknown reason)"
+
+        print(
+            f"\nCG: {status}\n"
+            f"    iter = {iter}\n"
+            f"    f    = {C:.8e}\n"
+            f"    ‖∇f‖ = {norm_grad:.4e}\n"
+            f"    α    = {alpha:.2e}\n"
+            f"    β    = {beta:.2e}"
+        )
+
 
         history = [cost_history, grad_history]
-        return UniformMps(W), C, norm_grad, history
+        return UniformMps(W), C, norm_grad, history 
 
 if __name__ == "__main__":
     

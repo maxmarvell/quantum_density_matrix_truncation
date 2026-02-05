@@ -114,7 +114,8 @@ def Execute_Run(
     if A_init is None:
         A_init = UniformMps(psi.reshape(1, 2, 1))
 
-    filepath = filepath_gen(dt, steps, tolerance, iterations, D, cut_off, run_folder)
+    filepath = filepath_gen(dt,
+                             steps, tolerance, iterations, D, cut_off, run_folder)
     filepath.parent.mkdir(parents=True, exist_ok=True)
 
     if debug:
@@ -306,6 +307,7 @@ def Execute_Run_Resume(
     # Continue chunks: start at the last saved time, step by time_chunk
     this_start = resume_t
 
+
     while this_start < time_total:
         max_t = min(this_start + time_chunk, time_total)
 
@@ -375,8 +377,8 @@ if __name__ == "__main__":
 
 
 
-    # # from pathlib import Path
-    # # import numpy as np
+    # from pathlib import Path
+    # import numpy as np
 
     # # Your chunk directory
     # tmp_dir = Path("/Users/phys2259/Documents/qdmt/results/temp_imports/temp_runs")
@@ -401,24 +403,25 @@ if __name__ == "__main__":
 
     dt = 1e-3
     steps = int(20//dt)
-    # steps = 3
-    tol =1e-9
-    iter=10000
+    # # steps = 3
+    tol =1e-7
+    iter=300
     Ddim = 12
 
     hour = 3600
     days = 24*hour
     
     cut_off = 4*days
-    Execute_Run_Resume(dt, steps, tol, iter, Ddim, cut_off, run_folder="integrable_test")
+    # Execute_Run_Resume(dt, steps, tol, iter, Ddim, cut_off, run_folder="integrable_test")
 
-    # # Execute_Run(dt, steps, tol, iter, Ddim, cut_off,True,False,save_after_steps=5)
-    # # A0, _ , _ = load_state("data/ground_state/gstate_ising2_D8_g1.5.npy")
+    # Execute_Run(dt, steps, tol, iter, Ddim, cut_off,True,False,save_after_steps=5)
+    # A0, _ , _ = load_state("data/ground_state/gstate_ising2_D8_g1.5.npy")
 
 
-    # A0_tens = np.load("data/ground_state/tfim_AL_D12_g1.5.npz")["A"]
-    # A0=UniformMps(A0_tens)
-    # A0.is_isometry()
+    A0_tens = np.load("data/ground_state/tfim_AL_D12_g1.5.npz")["A"]
+    A0=UniformMps(A0_tens)
+    A0.is_isometry()
+    
     # start1 = time.time()
 
 
@@ -431,7 +434,13 @@ if __name__ == "__main__":
     # start = time.time()
 
 
-    # Execute_Run(dt, steps, tol, iter, Ddim, cut_off, save = False, debug = True, A_init = A0, save_after_steps = 30, g=-0.2,h=0, J=-1, L=4, theta =  np.pi / 2, phi =  np.pi / 2, run_folder="integrable_test")
+    # Execute_Run(dt, steps, tol, iter, Ddim, cut_off, save = True, debug = False, A_init = A0, save_after_steps = 50, g=-0.2,h=0, J=-1, L=4, theta =  np.pi / 2, phi =  np.pi / 2, run_folder="integrable_test")
+    # Execute_Run_Resume(dt, steps, tol, iter, Ddim, cut_off, save_after_steps = 50, g=-0.2,h=0, J=-1, L=4, theta =  np.pi / 2, phi =  np.pi / 2, run_folder="integrable_test")
+    
+    # THE LONG HIGH PRECISION D=8 run which had to be aborted because it took forever.
+    # Execute_Run_Resume(dt, steps, tol, iter, Ddim, cut_off, save_after_steps = 50, g=-0.2,h=0, J=-1, L=4, theta =  np.pi / 2, phi =  np.pi / 2, run_folder="integrable_test", tmp_dir_override='/Users/phys2259/Documents/qdmt/results/integrable_test/.tmp_benchmark_dt=0.001_steps=19999_tol=1e-09_it=10000_D=8_cut=345600')
+    
+    
     # end = time.time()
     # print("Elapsed time for small:", end - start, "seconds")
     # print("Elapsed time for big:", end1 - start1, "seconds")

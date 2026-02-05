@@ -1,5 +1,5 @@
 from examples.data_management import load_data, unfold_data, load_unfolded_data, sort_and_save_dataset, extend_unfolded_data
-from examples.analyze_first import plot_unfolded_twofields
+from examples.analyze_first import plot_unfolded_twofields, plot_over_time
 import numpy as np
 import matplotlib.pyplot as plt
 from qdmt.analysis.tools import *
@@ -19,15 +19,15 @@ hour = 3600
 days = 24*hour
 
 
-# === Dataset 1 ===
+# === Dataset 1.1 Non-integrable model, g=1.05, h=09.5, J=-1 ===
 
-# dt = 1e-3
-# steps = int(20//dt)
-# tol =1e-11
-# iter=40000
-# Ddim = 12
-# cut_off = 2*days
-# # D12_high_precision_raw=load_data(dt, steps, tol, iter, Ddim, cut_off)
+dt = 1e-3
+steps = int(20//dt)
+tol =1e-11
+iter=40000
+Ddim = 12
+cut_off = 2*days
+# D12_high_precision_raw=load_data(dt, steps, tol, iter, Ddim, cut_off)
 
 
 # # data_sorted, outpath = sort_and_save_dataset(D12_high_precision_raw, filepath)
@@ -35,10 +35,42 @@ days = 24*hour
 # # D12_high_precision_sorted=load_data(dt, steps, tol, iter, Ddim, cut_off, dir="sorted")
 # # D12_high_precision_=unfold_data(D12_high_precision_sorted,dt,steps,tolerance=tol,iterations=iter,D=12,cut_off=cut_off, overwrite=True)
 
-# D12_high_precision_=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
+non_integrable_D12_high_precision_unfolded=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
+
+
+
+
+
+
+# === Dataset 1.2 Non-integrable model ===
+
+dt = 1e-3
+steps = int(20//dt)
+tol =1e-9
+iter=40000
+Ddim = 8
+cut_off = 2*days
+
+
+non_integrable_D8_dat=np.load('/Users/phys2259/Documents/qdmt/results/sorted/benchmark_dt=0.001_steps=19999_tol=1e-09_it=10000_D=8_cut=172800.npz')
+
+# unfold_data(non_integrable_D8_dat,
+#     dt,
+#     steps,
+#     tol,
+#     iter,
+#     Ddim,
+#     cut_off,
+#     overwrite=True,
+#     dir = "sorted"
+# )
+non_integrable_D8_unfolded=load_unfolded_data(dt, steps, tol, iter, Ddim, cut_off, dir = "sorted")
+
+# sys.exit()
+
 
 # === Dataset 2 ===
-#  integrable test
+#  integrable work laptop D=12 run, high accuracy, finished
 
 dt = 1e-3
 steps = int(20//dt)
@@ -54,17 +86,17 @@ J=-1
 L=4
 
 
-# testdat=load_data(dt, steps, tol, iter, Ddim, cut_off, dir = "integrable_test")
 
+# integrable_D12_dat=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/benchmark_dt=0.001_steps=19999_tol=1e-09_it=10000_D=12_cut=172800.npz")
 
-# unfold_data(testdat,
+# unfold_data(integrable_D12_dat,
 #     dt,
 #     steps,
 #     tol,
 #     iter,
 #     Ddim,
 #     cut_off,
-#     overwrite=False,
+#     overwrite=True,
 #     L=L,
 #     g=g,
 #     h=h,
@@ -72,18 +104,41 @@ L=4
 #     dir = "integrable_test"
 # )
 
-#  integrable
+integrable_D12_unfolded=load_unfolded_data(dt, steps, tol, iter, Ddim, cut_off, dir = "integrable_test")
 
 
-# testdat=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/merged_temp_imports.npz")
-# unfold_data(testdat,
+
+
+
+
+# === Dataset 3 ===
+#  integrable personal laptop D=8 run, high accuracy, unfinished
+
+dt = 1e-3
+steps = int(20//dt)
+tol =1e-9
+iter=10000
+Ddim = 8
+
+
+cut_off = 4*days
+g=-0.2
+h=0
+J=-1 
+L=4
+
+
+
+
+# integrable_D8_dat=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/benchmark_dt=0.001_steps=19999_tol=1e-09_it=10000_D=8_cut=345600.npz")
+# unfold_data(integrable_D8_dat,
 #     dt,
 #     steps,
 #     tol,
 #     iter,
 #     Ddim,
 #     cut_off,
-#     overwrite=False,
+#     overwrite=True,
 #     L=L,
 #     g=g,
 #     h=h,
@@ -91,83 +146,168 @@ L=4
 #     dir = "integrable_test"
 # )
 
-testdat=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
+integrable_D8_unfolded=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
 
 
-left="energy"
-right="t_magnetization"
 
 
-plot_unfolded_twofields(
-(testdat, "D=12"),
-field_left=left,
-field_right=right,
-title=left+" and "+right
-)
 
-sys.exit()
+# === Dataset 4 ===
+#  integrable, laptop D=8 run, low accuracy, unfinished
 
-# integrable over
-
-# plot_cost_vs_index(D12_high_precision_sorted)
+dt = 1e-3
+steps = int(20//dt)
+tol =1e-7
+iter=300
+Ddim = 8
 
 
-# sys.exit()
+cut_off = 4*days
+g=-0.2
+h=0
+J=-1 
+L=4
 
-# D12_high_precision_=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
 
-# extend_unfolded_data(
-#     dt, steps, tol, iter, Ddim, cut_off,
-#     new_key="trace_distance_dt",
-#     trajectory_fn=lambda states:compute_trace_distance_successive(states, L=4),
-#     overwrite=True
+
+
+# integrable_D8_dat_low=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/benchmark_dt=0.001_steps=19999_tol=1e-07_it=300_D=8_cut=345600.npz")
+# unfold_data(integrable_D8_dat_low,
+#     dt,
+#     steps,
+#     tol,
+#     iter,
+#     Ddim,
+#     cut_off,
+#     overwrite=True,
+#     L=L,
+#     g=g,
+#     h=h,
+#     J=J,
+#     dir = "integrable_test"
 # )
 
+integrable_D8_low_unfolded=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
 
-# extend_unfolded_data(
-#     dt, steps, tol, iter, Ddim, cut_off,
-#     new_key="trace_distance_to_avg",
-#     trajectory_fn=lambda states: compute_trace_distance_to_average(
-#         states,
-#         dt=dt,
-#         t_cut=10.0,   # example
-#         L=4
-#     ),
-#     overwrite=True
+
+
+
+# === Dataset 5 ===
+#  integrable, laptop D=4 run, low accuracy, unfinished
+
+dt = 1e-3
+steps = int(20//dt)
+tol =1e-7
+iter=300
+Ddim = 4
+
+
+cut_off = 4*days
+g=-0.2
+h=0
+J=-1 
+L=4
+
+
+
+
+# integrable_D4_dat_low=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/benchmark_dt=0.001_steps=19999_tol=1e-07_it=300_D=4_cut=345600.npz")
+# unfold_data(integrable_D4_dat_low,
+#     dt,
+#     steps,
+#     tol,
+#     iter,
+#     Ddim,
+#     cut_off,
+#     overwrite=True,
+#     L=L,
+#     g=g,
+#     h=h,
+#     J=J,
+#     dir = "integrable_test"
 # )
 
-
-# 
-# data_trimmed=D12_high_precision_raw
-# load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off)
+integrable_D4_low_unfolded=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
 
 
-# print("Raw time shape:", data_trimmed["time"].shape)
-# print("First 5 raw times:", data_trimmed["time"][:5])
-# print("Last 5 raw times:", data_trimmed["time"][-5:])
-# print("Max time:", np.max(data_trimmed["time"]))
 
-# sys.exit()
+
+# === Dataset 6 ===
+#  integrable, laptop D=12 run, low accuracy, unfinished
+
+dt = 1e-3
+steps = int(20//dt)
+tol =1e-7
+iter=300
+Ddim = 12
+
+
+cut_off = 4*days
+g=-0.2
+h=0
+J=-1 
+L=4
+
+
+
+# integrable_D12_dat_low=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/merged_d12_low_partial.npz")
+integrable_D12_dat_low=np.load("/Users/phys2259/Documents/qdmt/results/integrable_test/benchmark_dt=0.001_steps=19999_tol=1e-07_it=300_D=12_cut=345600.npz")
+# unfold_data(integrable_D12_dat_low,
+#     dt,
+#     steps,
+#     tol,
+#     iter,
+#     Ddim,
+#     cut_off,
+#     overwrite=True,
+#     L=L,
+#     g=g,
+#     h=h,
+#     J=J,
+#     dir = "integrable_test"
+# )
+
+integrable_D12_low_unfolded=load_unfolded_data(dt, steps, tol,iter,Ddim,cut_off=cut_off, dir="integrable_test")
+
+
+
+
 
 
 if __name__ == "__main__":
 
-    data=D12_high_precision_
+    # plot_over_time
 
-    left="trace_distance_to_avg"
-    # right="dist_steady"
-    # left="von_neumann_entropy"
-    # left="l_magnetization"
+    data=non_integrable_D8_unfolded
+    # data=integrable_D8_unfolded
 
-    # right="renyi_entropy"
-    right="von_neumann_entropy"
-    # right="energy"
-    # right="trace_distance_dt"
-    # right="dist_steady"
-
-    plot_unfolded_twofields(
-    (D12_high_precision_, "D=12"),
-    field_left=left,
-    field_right=right,
-    title=left+" and "+right
+    plot_over_time(
+        (data, "cost", "D=8 high precision cost"),
+        (data, "energy", "D=8 high precision energy"),
+        (data,"von_neumann_entropy", "entroy"),
+        dt=0.001,
+        t_max=20,
+        title="Renyi over time"
     )
+
+
+    # # data=integrable_D8_unfolded
+    # data=integrable_D8_low_unfolded
+
+    # left="energy"
+    # # right="dist_steady"
+    # # left="von_neumann_entropy"
+    # # left="l_magnetization"
+
+    # # right="renyi_entropy"
+    # right="norm"
+    # # right="energy"
+    # # right="trace_distance_dt"
+    # right="dist_steady"
+
+    # plot_unfolded_twofields(
+    # (data, "D=8"),
+    # field_left=left,
+    # field_right=right,
+    # title=left+" and "+right
+    # )

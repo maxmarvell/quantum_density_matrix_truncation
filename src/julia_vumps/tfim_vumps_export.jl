@@ -21,7 +21,7 @@ using ProgressMeter, Plots # for demonstration purposes
 using NPZ
 
 # Parameters
-D = 16
+D = 4
 g = 1.5            # transverse field = 1.5 (paramagnet point)
 d = 2              # physical dimension
 

@@ -271,7 +271,7 @@ def unfold_data(
     # print(state[-1])
     # print("test")
     # print(state[19999])
-    # print(len(state))
+    print(len(state))
 
 
     # --- Derived quantities ---
@@ -283,8 +283,8 @@ def unfold_data(
     dist_steady = np.array([tools.trace_distance_mps(UniformMps(x), UniformMps(last_A), L) for x in state])
 
 
-    print("compute von neumann")
-    von_neumann_entropy = np.array([tools.compute_von_neumann_entropy(UniformMps(x), L) for x in state])
+    # print("compute von neumann")
+    # von_neumann_entropy = np.array([tools.compute_von_neumann_entropy(UniformMps(x), L) for x in state])
 
 
     print("compute transversal magnetization")
@@ -391,6 +391,7 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
     data = np.load(load_path)
 
     print(f"Loaded unfolded dataset: {load_path}")
+    print(f"number of timesteps in this run: {len(data["time"])}")
 
     return {
         "time": data["time"],
@@ -407,6 +408,53 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
         "l_magnetization": data["l_magnetization"],
         "von_neumann_entropy": data["von_neumann_entropy"],
         "dist_steady": data["dist_steady"],
+        # "trace_distance_to_avg": data["trace_distance_to_avg"],
+        # "trace_distance_dt": data["trace_distance_dt"]
+
+    }
+
+
+def load_unfolded_data_old(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05, h=-0.5, J=-1, dir =None):
+    """
+    Load unfolded data saved in results/datasets_unfolded/.
+    Returns a dict or None if file not found.
+    """
+
+    # original_path = filepath_gen(dt, steps, tolerance, iterations, D, cut_off)
+
+    # Correct folder
+
+    if dir is not None:
+        unfolded_folder = RESULTS_DIR / dir/ "datasets_unfolded"
+    else:
+        unfolded_folder = RESULTS_DIR / "datasets_unfolded"
+
+    # Avoid double suffix
+    unfolded_name = filename_gen(dt, steps, tolerance, iterations, D, cut_off) + "_trimmed_unfolded.npz"
+
+    load_path = unfolded_folder / unfolded_name
+
+    if not load_path.exists():
+        print(f"Unfolded dataset not found: {load_path}")
+        return None
+
+    data = np.load(load_path)
+
+    print(f"Loaded unfolded dataset: {load_path}")
+
+    return {
+        "time": data["time"],
+        "state": data["state"],
+        "gradient_norm": data["gradient_norm"],
+        "cost": data["cost"],
+        "duration": data["duration"],
+        "norm": data["norm"],
+        "energy": data["energy"],
+        "renyi_entropy": data["renyi_entropy"],
+        "log_cost": data["log_cost"],
+
+ 
+
         # "trace_distance_to_avg": data["trace_distance_to_avg"],
         # "trace_distance_dt": data["trace_distance_dt"]
 

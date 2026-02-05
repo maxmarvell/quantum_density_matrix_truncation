@@ -165,7 +165,7 @@ def evolve(A0: UniformMps,
         A0 = A
 
         duration[i]=-time_at_start_of_step+time_at_end_of_step
-        # print(duration)
+        print(duration)
 
         # check time
         if time.time() - start_time > cut_off:
