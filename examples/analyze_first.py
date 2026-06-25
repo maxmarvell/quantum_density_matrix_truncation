@@ -444,36 +444,44 @@ def plot_unfolded_twofields(
     plt.show()
 
 
+
 def plot_over_time(*pairs, dt=1.0, t0=0.0, t_max=None, xlabel="Time", title=None, figsize=(10,6)):
     """
-    pairs: (data, field) OR (data, field, label) ...
-    data is dict-like: data[field] -> array
-    time is built as t = t0 + dt*np.arange(len(values)) (your "buggy time" fix)
+    pairs can be:
+      (data, field)
+      (data, field, label)
+      (data, field, label, dt_i)
+      (data, field, label, dt_i, style_dict)
+    style_dict is passed to plt.plot(**style_dict)
     """
     plt.figure(figsize=figsize)
     for p in pairs:
         data, field = p[0], p[1]
         label = p[2] if len(p) > 2 else f"{field}"
+        dt_i  = p[3] if len(p) > 3 and p[3] is not None else dt
+        style = p[4] if len(p) > 4 and p[4] is not None else {}
+
         if data is None or field not in data:
             print(f"skip: {label} (missing data/field)")
             continue
 
         y = np.asarray(data[field]).flatten()
-        t = t0 + dt * np.arange(len(y))
+        t = t0 + dt_i * np.arange(len(y))
 
         if t_max is not None:
             m = t <= t_max
             t, y = t[m], y[m]
 
-        plt.plot(t, y, marker="o", linestyle="", markersize=3, label=label)
+        # default: connect points and show markers (unless overridden)
+        if "label" not in style:
+            style["label"] = label
+        plt.plot(t, y, **style)
 
     plt.xlabel(xlabel)
     if title: plt.title(title)
     plt.grid(True, linewidth=0.5, linestyle="--", alpha=0.7)
     plt.legend()
     plt.show()
-
-
 
 if __name__ == "__main__":
 

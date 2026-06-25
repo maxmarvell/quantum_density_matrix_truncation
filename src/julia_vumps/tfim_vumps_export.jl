@@ -21,9 +21,10 @@ using ProgressMeter, Plots # for demonstration purposes
 using NPZ
 
 # Parameters
-D = 4
+D = 2
 g = 1.5            # transverse field = 1.5 (paramagnet point)
 d = 2              # physical dimension
+
 
 println("Building transverse-field Ising model...")
 H = transverse_field_ising(; g=g)
@@ -51,6 +52,11 @@ npzwrite(outpath, Dict("A" => A))
 println("Saved to: ", outpath)
 
 print(abs(expectation_value(groundstate, 1 => σᶻ())))
+
+mx = real(expectation_value(groundstate, 1 => σˣ()))
+mz = real(expectation_value(groundstate, 1 => σᶻ()))
+println("mx=", mx, "  mz=", mz)
+
 
 # npzwrite("tfim_AL_D6_g1.0.npz", Dict("A" => A))
 

@@ -1,6 +1,9 @@
 from src.qdmt.evolve import *
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from examples.data_management import *
+from examples.find_parametrization import A_from_snug_params
+from src.qdmt.analysis.tools import HS_distance_L_mps, rho_matrix,evolve_4qubit_density_with_two_copy_U, two_qubit_U,trace_out_leftmost_qubit_4to3,trace_out_rightmost_qubit_4to3
+
 
 import os
 import matplotlib.pyplot as plt
@@ -93,6 +96,7 @@ def Execute_Run(
     theta: float = np.pi / 2,
     phi: float = np.pi / 2,
     run_folder: str | Path = None,
+    Trotter_order=2
 ):
     """
     Runs evolution in chunks, saving chunk*.npz into a temp directory and merging at the end.
@@ -112,6 +116,7 @@ def Execute_Run(
     # --- initial state ---
     psi = np.array([np.cos(theta / 2), np.exp(phi * 1j) * np.sin(theta / 2)])
     if A_init is None:
+        print("no initial state given explicitly")
         A_init = UniformMps(psi.reshape(1, 2, 1))
 
     filepath = filepath_gen(dt,
@@ -119,12 +124,12 @@ def Execute_Run(
     filepath.parent.mkdir(parents=True, exist_ok=True)
 
     if debug:
-        filepath = Path(str(filepath) + "_debug")
+        filepath = Path(str(filepath) + f"(_Trotter_order={Trotter_order})")
 
     print("Output file:", filepath)
     assert check_write_permission(filepath)
 
-    model = TransverseFieldIsing(g=g, delta_t=dt, h=h, J=J)
+    model = TransverseFieldIsingSym(g=g, delta_t=dt, h=h, J=J)
     print("Model params:", [g, J, h])
 
     time_total = steps * dt
@@ -150,7 +155,8 @@ def Execute_Run(
             iterations,
             tolerance,
             cut_off,          # evolve still receives cut_off
-            start_t=this_start,
+            start_t=this_start, 
+            trotterization_order=Trotter_order
         )
 
         A_init = UniformMps(state[-1])
@@ -180,6 +186,7 @@ def Execute_Run(
     print("Merging temporary files...")
     merge_temp_files(tmp_dir, filepath)
     print("✓ Finished run.")
+    return state, cost
 
 
 def _extract_chunk_number(path: Path) -> int:
@@ -207,6 +214,10 @@ def Execute_Run_Resume(
     run_folder: str | Path = None,
     tmp_dir_override: str | Path | None = None,  # NEW: optional location of chunk*.npz
 ):
+    
+
+    A_global_initial = np.array(A_init.tensor)
+
     """
     Resume a previously started chunked run.
 
@@ -402,30 +413,221 @@ if __name__ == "__main__":
     # sys.exit()
 
     dt = 1e-3
-    steps = int(20//dt)
+    dt=0.05
+    steps = int(2//dt)
     # # steps = 3
-    tol =1e-7
-    iter=300
-    Ddim = 12
+    tol =1e-14
+    iter=10000
+    Ddim = 2
 
     hour = 3600
     days = 24*hour
     
-    cut_off = 4*days
+    cut_off = 1*hour
     # Execute_Run_Resume(dt, steps, tol, iter, Ddim, cut_off, run_folder="integrable_test")
 
     # Execute_Run(dt, steps, tol, iter, Ddim, cut_off,True,False,save_after_steps=5)
     # A0, _ , _ = load_state("data/ground_state/gstate_ising2_D8_g1.5.npy")
 
+    print("HI")
 
-    A0_tens = np.load("data/ground_state/tfim_AL_D12_g1.5.npz")["A"]
-    A0=UniformMps(A0_tens)
-    A0.is_isometry()
+    A0_tens_vumps = np.load("data/ground_state/tfim_AL_D2_g1.5.npz")["A"]
+    mps_vumps=UniformMps(A0_tens_vumps)    
+
+
+    filename = "/Users/phys2259/Documents/qdmt/super_snug_results_warm_big_sym.npz"
+    data = np.load(filename, allow_pickle=True)
+    params = data["params_free"]  
+
+    A0_tens_params = A_from_snug_params(params[0])
+    mps_para =UniformMps(A0_tens_params)    
+
+
+    hs = HS_distance_L_mps(mps_vumps,mps_para, 3)
+
+    print(f" hs distance : {hs}")
+    # sys.exit()
+
+    # A0=UniformMps(A0_tens)
+    # A0.is_isometry()
+
+    mps_para.is_isometry()
     
     # start1 = time.time()
 
+    # steps=19
 
-    # Execute_Run(dt, steps, tol, iter, Ddim, cut_off, save = False, debug = True, A_init = A0, save_after_steps = 3, g=-0.2,h=0, J=-1, L=4, theta =  np.pi / 2, phi =  np.pi / 2, run_folder="integrable_test")
+    g=0.2
+    # dt=0.2
+    U2=two_qubit_U(g,2*dt)
+
+    # print(A0_tens_params)
+
+    # Execute_Run(dt, steps, tol, iter, Ddim, cut_off, save = False, debug = True, A_init = A0, save_after_steps = 2, g=-0.2,h=0, J=-1, L=3, theta =  np.pi / 2, phi =  np.pi / 2, run_folder="integrable_D2_forQM",Trotter_order=0)
+
+    evolved_states, costs = Execute_Run(dt, steps, tol, iter, Ddim, cut_off, save = False, debug = True, save_after_steps = 100,
+                A_init = mps_vumps, g=-0.2,h=0, J=-1, L=3, theta =  np.pi / 2, phi =  np.pi / 2, 
+                run_folder="integrable_D2_forQM_debug",
+                Trotter_order=-1)
+    
+    # print(evolved_states[0])
+    sys.exit()
+    for i in range(0,19):
+        pre_evolved_params=UniformMps(A_from_snug_params(params[i]))
+        evolved_params = UniformMps(A_from_snug_params(params[i+1]))
+
+
+        
+        evolved_qdmt = UniformMps(evolved_states[i])
+
+        manual_evolved_rho4 = evolve_4qubit_density_with_two_copy_U(rho_matrix(pre_evolved_params,4),U2)
+        RDM_manual_3_left = trace_out_leftmost_qubit_4to3(manual_evolved_rho4)
+        RDM_manual_3_right = trace_out_rightmost_qubit_4to3(manual_evolved_rho4)
+        RDM_manual_avg= 0.5*(RDM_manual_3_left+RDM_manual_3_right)
+
+
+        diff=rho_matrix(evolved_qdmt,3)-rho_matrix(evolved_params,3)
+
+
+        print(f"i={i}: The cost at this step was {costs[i]}")
+        
+        # print(f"THe hs distance between the qdmt classical result and the parametrization ansatz is {np.real(np.trace(diff @ diff)):6f}")
+
+        diff=rho_matrix(evolved_qdmt,3)-RDM_manual_avg
+        # print(f"THe hs distance between the qdmt classical result and the manual evolution from parameter to paramater {np.real(np.trace(diff @ diff)):6}")
+
+        purity_evolved_average_rho=np.real(np.trace(RDM_manual_avg @ RDM_manual_avg))
+        # print(f"Purity of the manually evovled state: {purity_evolved_average_rho:6f}")
+
+        fidelity_average=np.real(np.trace(RDM_manual_avg @rho_matrix(evolved_params,3)))
+        # print(f"Fidelity of the manually evovled state and the paramter state: {purity_evolved_average_rho:6f}")
+
+        purity_evolved_params_rho=np.trace(rho_matrix(evolved_params,3) @rho_matrix(evolved_params,3))
+        # print(f"Purity of the paramtrzed evovled state: {np.real(purity_evolved_params_rho):6f}")
+
+        # print(f"sum of ansatz putiry, target purity -2*fidelity: {np.real(purity_evolved_average_rho+purity_evolved_params_rho-2*fidelity_average):6f} ")
+        print(f"\n correction= {np.real(purity_evolved_average_rho):8f}  ansatz purity = {purity_evolved_params_rho:8f}  Fidelity = {fidelity_average:8f} \n ")
+    
+
+
+    sys.exit()    
+
+
+
+
+
+
+
+
+
+    RDM_manual_U_evolution_4=evolve_4qubit_density_with_two_copy_U(rho_matrix(mps_para,4),U2)
+
+    RDM_manual_3_left = trace_out_leftmost_qubit_4to3(RDM_manual_U_evolution_4)
+
+    RDM_manual_3_right = trace_out_rightmost_qubit_4to3(RDM_manual_U_evolution_4)
+
+    RDM_manual_avg= 0.5*(RDM_manual_3_left+RDM_manual_3_right)
+
+    evolved_mps=UniformMps(evolved_states[0])
+
+    RDM_evolved = rho_matrix(evolved_mps,3)
+
+    print(A_from_snug_params(params[1]))
+
+
+    evolved_params=UniformMps(A_from_snug_params(params[1]))
+
+    hs_1 =  HS_distance_L_mps(evolved_mps,evolved_params, 3)
+
+    np.set_printoptions(linewidth=200)
+
+
+    print(f" hs distance : {hs_1}")
+
+
+    print(f" this is the 3-site RDM before evolution \n {np.real(rho_matrix(mps_para,3))  }")
+
+
+    # print(f" this is the 3-site RDM after evolution {rho_matrix(evolved_mps,3)  }")
+
+
+    g=0.2
+    dt=0.1
+    U2=two_qubit_U(g,2*dt)
+
+    RDM_manual_U_evolution_4=evolve_4qubit_density_with_two_copy_U(rho_matrix(mps_para,4),U2)
+
+    RDM_manual_3_left = trace_out_leftmost_qubit_4to3(RDM_manual_U_evolution_4)
+
+    RDM_manual_3_right = trace_out_rightmost_qubit_4to3(RDM_manual_U_evolution_4)
+
+    RDM_manual_avg= 0.5*(RDM_manual_3_left+RDM_manual_3_right)
+
+    RDM_params_evolve = rho_matrix(evolved_params,3)
+
+    # RDM_evolved=rho_matrix(evolved_states[1])
+
+
+    diff = RDM_manual_3_left - RDM_evolved
+    print(f" this is the hs dist between left manual and  evolved  {np.trace(diff @ diff)}")    
+
+    diff = RDM_manual_3_right - RDM_evolved
+    print(f" this is the hs dist between right manual and  evolved  {np.trace(diff @ diff)}")    
+
+    diff = RDM_manual_avg - RDM_evolved
+    print(f" this is the hs dist between avg manual and  evolved  {np.trace(diff @ diff)}")    
+
+    print(f" tr rl rr =  {0.5*np.trace((RDM_manual_3_left- RDM_manual_3_right) @ RDM_manual_3_left)} ")
+
+    sys.exit()
+
+    diff = RDM_evolved - RDM_params_evolve
+    print(f" this is the hs dist between qdmt evolved and params evolved  {np.trace(diff @ diff)}")    
+
+
+
+    diff = RDM_manual_3_left - RDM_params_evolve
+    print(f" this is the hs dist between left manual and params evolved  {np.trace(diff @ diff)}")    
+
+    diff = RDM_manual_3_right - RDM_params_evolve
+    print(f" this is the hs dist between right manual and params evolved  {np.trace(diff @ diff)}")    
+
+    diff = RDM_manual_avg - RDM_params_evolve
+    print(f" this is the hs dist between avg manual and params evolved  {np.trace(diff @ diff)}")    
+
+    sys.exit()
+
+
+    print(f" this is the 3-site RDM after evolution \n {np.real(rho_matrix(evolved_mps,3))  }")
+
+    RDM_manual_3_right = trace_out_rightmost_qubit_4to3(RDM_manual_U_evolution_4)
+    print(f" this is the right 3-site RDM after MANUAL evolution \n {np.real(RDM_manual_3_right)}")
+
+    print(f" this is the left 3-site RDM after MANUAL evolution \n {np.real(RDM_manual_3_left)}")
+
+
+    print(f" this is the average 3-site RDM after MANUAL evolution \n {np.real(0.5*(RDM_manual_3_left+RDM_manual_3_right))}")
+
+
+    print(f" this is the difference of 3-site RDM after MANUAL evolution \n {np.real(1.0*(RDM_manual_3_left-RDM_manual_3_right))}")
+
+    diff = (RDM_manual_3_left-RDM_manual_3_right)
+    print(f" this is the hs dist between L and R manual  {np.trace(diff @ diff)}")
+
+
+
+    diff = 0.5*(RDM_manual_3_left+RDM_manual_3_right)-rho_matrix(evolved_mps,3)
+    print(f" this is the hs dist between average evolved (manual) and parameter evolved {np.trace(diff @ diff)}")
+
+
+    diff = 0.5*(RDM_manual_3_left+RDM_manual_3_right)-rho_matrix(evolved_params,3)
+    print(f" this is the hs dist between average evolved (manual) and gradient evolved {np.trace(diff @ diff)}")
+
+    diff = rho_matrix(mps_para,3)-rho_matrix(evolved_params,3)
+    print(f" this is the hs dist between start and evolved (params {np.trace(diff @ diff)}")
+
+
+
     # end1 = time.time()
 
     # dt = 1e-4

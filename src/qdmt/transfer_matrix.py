@@ -9,6 +9,12 @@ import warnings
 
 from qdmt.uniform_mps import UniformMps
 
+class LeftFixedPoint():
+    def __init__(self, tensor: np.ndarray, A: np.ndarray):
+        self.tensor, self.A = tensor, A
+        self.D = tensor.shape[0]
+
+
 class RightFixedPoint():
     def __init__(self, tensor: np.ndarray, A: np.ndarray):
         self.tensor, self.A = tensor, A
@@ -218,6 +224,23 @@ class TransferMatrix(AbstractTransferMatrix):
             tr = np.trace(r).real
             r /= tr
             return RightFixedPoint(r, self.A)
+        
+
+    def left_fixed_point(self, atol=1e-10, rtol=1e-10):
+        if self.A is None or self.B is None:
+            raise ValueError("Need A and B to define fixed point.")
+        if self.A is not self.B:
+            warnings.warn("A and B differ: left_fixed_point is not guaranteed.")
+
+        M = self.to_matrix()
+        eig, l = eigs(M.T, k=1, which="LM")   # left eigenvector of M
+
+        if np.isclose(eig[0], 1.0, atol=atol, rtol=rtol):
+            l = l.reshape((self.Da, self.Db))
+            return LeftFixedPoint(l, self.A)
+
+        raise LinAlgError("Transfer matrix has no eigenvalue 1: left fixed point did not converge.")
+    
         
 
 

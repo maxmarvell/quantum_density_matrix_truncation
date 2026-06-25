@@ -310,6 +310,11 @@ def unfold_data(
     print("compute log cost")
     log_cost = np.log(cost)
 
+    print("compute loschmidt")
+    loschmidt = tools.compute_loschmidt(state)
+
+    
+
     
 
     # --- Build extended dict ---
@@ -327,7 +332,8 @@ def unfold_data(
         "t_magnetization": t_magnetization,
         "l_magnetization": l_magnetization,
         "von_neumann_entropy": von_neumann_entropy,
-        "dist_steady": dist_steady
+        "dist_steady": dist_steady,
+        "loschmidt": loschmidt
     }
 
     # --- Save path construction ---
@@ -391,7 +397,7 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
     data = np.load(load_path)
 
     print(f"Loaded unfolded dataset: {load_path}")
-    print(f"number of timesteps in this run: {len(data["time"])}")
+    # print(f"number of timesteps in this run: {len(data["time"])}")
 
     return {
         "time": data["time"],
@@ -408,6 +414,7 @@ def load_unfolded_data(dt, steps, tolerance, iterations, D, cut_off, L=4, g=1.05
         "l_magnetization": data["l_magnetization"],
         "von_neumann_entropy": data["von_neumann_entropy"],
         "dist_steady": data["dist_steady"],
+        "loschmidt": data["loschmidt"]
         # "trace_distance_to_avg": data["trace_distance_to_avg"],
         # "trace_distance_dt": data["trace_distance_dt"]
 

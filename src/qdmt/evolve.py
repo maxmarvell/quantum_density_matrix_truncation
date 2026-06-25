@@ -1,5 +1,5 @@
 from qdmt.uniform_mps import UniformMps
-from qdmt.model import AbstractModel, TransverseFieldIsing
+from qdmt.model import AbstractModel, TransverseFieldIsing, TransverseFieldIsingSym
 from qdmt.cost import EvolvedHilbertSchmidt, NaiveEvolvedHilbertSchmidt as Naive
 from qdmt.optimisation import ConjugateGradient
 from qdmt.manifold import Grassmann
@@ -148,11 +148,11 @@ def evolve(A0: UniformMps,
         
         time_at_start_of_step=time.time()
         if (D**8*d**7*np.log(L) < d**(2*L)*L*D**2*d and D**6*d**6*np.log(L) < d**(2*L)):
-            # print('do evolved')
+            print('do evolved')
             f = EvolvedHilbertSchmidt(A0, model, L, trotterization_order)
         else:
             f = Naive(A0, model, L, trotterization_order)
-            # print('do naive?')
+            print('do naive')
         # print('start gd')    
         gd = ConjugateGradient(f, M, A, max_iter, tol=tol, verbose=True)
         
@@ -165,7 +165,7 @@ def evolve(A0: UniformMps,
         A0 = A
 
         duration[i]=-time_at_start_of_step+time_at_end_of_step
-        print(duration)
+        # print(duration)
 
         # check time
         if time.time() - start_time > cut_off:

@@ -685,6 +685,15 @@ class NaiveEvolvedHilbertSchmidt(AbstractCostFunction):
             self.U1, self.U2 = model.trotter_first_order()
         elif trotterization_order == 2:
             self.U1, self.U2 = model.trotter_second_order()
+        #quick fix for only H even  
+        elif trotterization_order == 0:    
+            self.U1, self.U2 = model.trotter_zeroth_order()
+        #quick fix for average over H even and H odd. this is returning u1=1 and u2=e^i h dt (local unitary) 
+        elif trotterization_order == -1:    
+            
+            self.U1, self.U2 = model.trotter_zeroth_order()    
+            # print(self.U1)
+            # print(self.U2)
 
         # construct rho(A(0); dt)
         # one time computation
@@ -702,6 +711,10 @@ class NaiveEvolvedHilbertSchmidt(AbstractCostFunction):
             N = L + 3
         elif L % 2 == 0 and self.trotterization_order == 2:
             N = L + 4
+        elif self.trotterization_order == 0 and L % 2 ==1:
+            N = L + 3
+        elif self.trotterization_order == -1 and L % 2 ==1:
+            N = L + 3            
 
         mps = A.to_mps_chain(N)
 
@@ -717,7 +730,11 @@ class NaiveEvolvedHilbertSchmidt(AbstractCostFunction):
 
         tensors = [mps, mps.conj(), rA.tensor]
 
-        if self.trotterization_order == 1: 
+    
+
+
+        # this is implementing the quick fix for even only
+        if self.trotterization_order == 1 or self.trotterization_order < 1 and L % 2 ==1: 
             indices = [
                 [1, 2] + [-(i+1) for i in range(L)] + ([3, 4] if (L%2 == 0) else [3, 4, 5]),
                 [1, 2] + [-(i+L+1) for i in range(L)] + ([3, 5] if (L%2 == 0) else [3, 4, 6]),
@@ -730,7 +747,24 @@ class NaiveEvolvedHilbertSchmidt(AbstractCostFunction):
                 [6, 7]
             ]
 
-     
+        if self.trotterization_order == -1:
+            mps_start = A.to_mps_chain(N)
+
+            # first trotter step, even is trivial, odd is nontrivial
+            mps_even = trotter_step(mps_start, U1)
+            mps_odd = trotter_step(mps_start, U2)
+
+            # second trotter step, even is nontrivial, odd is trivial
+            mps_even = trotter_step(mps_even, U2,start=1)
+            mps_odd = trotter_step(mps_odd, U1,start=1)
+
+            tensors_even = [mps_even, mps_even.conj(), rA.tensor]
+            tensors_odd = [mps_odd, mps_odd.conj(), rA.tensor]
+            rhoA_even = ncon(tensors_even, indices)
+            rhoA_odd = ncon(tensors_odd, indices)
+            rhoA_avg = 0.5 * (rhoA_even + rhoA_odd)
+            return rhoA_avg
+
 
         rhoA = ncon(tensors, indices)
 
